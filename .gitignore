@@ -3,3 +3,4 @@
 models/full/*.gguf
 models/mini/*.gguf
 models/mini_v2/*.gguf
+chroma_db/
