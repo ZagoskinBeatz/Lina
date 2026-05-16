@@ -1,0 +1,107 @@
+{
+  "id": "gpu_driver_issues",
+  "name": "Проблемы с GPU / драйверами",
+  "category": "hardware",
+  "triggers": [
+    "проблемы с видеокартой", "gpu driver", "драйвер видеокарты",
+    "nvidia не работает", "нет ускорения", "screen tearing",
+    "артефакты на экране", "чёрный экран после обновления",
+    "низкий fps", "gpu проблемы"
+  ],
+  "steps": [
+    {
+      "id": "detect_gpu",
+      "description": "Определение видеокарты",
+      "check": "lspci -nn 2>/dev/null | grep -iE 'VGA|3D|Display'",
+      "parse": "VGA|3D|Display",
+      "if_match": {
+        "next": "check_nvidia"
+      },
+      "if_no_match": {
+        "diagnosis": "GPU не обнаружен в системе",
+        "solution": "Проверьте: lspci | head -30. Возможно, GPU отключён в BIOS.",
+        "severity": "critical",
+        "next": null
+      }
+    },
+    {
+      "id": "check_nvidia",
+      "description": "Проверка NVIDIA GPU",
+      "check": "lspci -nn 2>/dev/null | grep -i nvidia",
+      "parse": "NVIDIA|nvidia",
+      "if_match": {
+        "next": "check_nvidia_driver"
+      },
+      "if_no_match": {"next": "check_amd"}
+    },
+    {
+      "id": "check_nvidia_driver",
+      "description": "Проверка драйвера NVIDIA",
+      "check": "nvidia-smi 2>/dev/null | head -5",
+      "parse": "Driver Version",
+      "if_match": {
+        "diagnosis": "Драйвер NVIDIA установлен и работает.",
+        "solution": "Если есть tearing: добавьте 'nvidia-drm.modeset=1' в параметры ядра. Для Wayland: проверьте, включён ли DRM KMS.",
+        "explanation": "Проприетарный драйвер NVIDIA загружен. Проверьте, нет ли конфликтов с nouveau.",
+        "severity": "low",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "NVIDIA GPU найден, но проприетарный драйвер не установлен",
+        "solution": "Для Arch: sudo pacman -S nvidia nvidia-utils. Для Ubuntu: sudo apt install nvidia-driver-535. Для Fedora: sudo dnf install akmod-nvidia",
+        "explanation": "Без проприетарного драйвера NVIDIA GPU работает через nouveau (базовый, без аппаратного ускорения).",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      }
+    },
+    {
+      "id": "check_amd",
+      "description": "Проверка AMD GPU",
+      "check": "lspci -nn 2>/dev/null | grep -iE 'AMD|Radeon|ATI'",
+      "parse": "AMD|Radeon|ATI",
+      "if_match": {
+        "next": "check_amdgpu_driver"
+      },
+      "if_no_match": {"next": "check_intel"}
+    },
+    {
+      "id": "check_amdgpu_driver",
+      "description": "Проверка драйвера AMDGPU",
+      "check": "lsmod | grep amdgpu",
+      "parse": "amdgpu",
+      "if_match": {
+        "diagnosis": "Драйвер AMDGPU загружен и работает.",
+        "solution": "Для Vulkan: установите mesa-vulkan-drivers (или vulkan-radeon). Для OpenCL: rocm-opencl-runtime.",
+        "severity": "low",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "AMD GPU найден, но драйвер amdgpu не загружен",
+        "solution": "sudo modprobe amdgpu. Если не помогло — проверьте, что firmware установлена: linux-firmware пакет.",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      }
+    },
+    {
+      "id": "check_intel",
+      "description": "Проверка Intel GPU",
+      "check": "lsmod | grep i915",
+      "parse": "i915",
+      "if_match": {
+        "diagnosis": "Intel GPU (i915) работает.",
+        "solution": "Для ускорения: установите intel-media-driver (VA-API). Для Vulkan: vulkan-intel.",
+        "severity": "info",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "GPU обнаружен, но подходящий драйвер не загружен",
+        "solution": "Проверьте: lspci -k | grep -A3 VGA — какой модуль ядра используется. Установите firmware: sudo pacman -S linux-firmware / sudo apt install firmware-misc-nonfree",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      }
+    }
+  ]
+}

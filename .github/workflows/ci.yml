@@ -1,0 +1,105 @@
+name: Lina CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r lina/requirements.txt pytest
+
+      - name: Run pytest suite
+        run: |
+          cd lina
+          python -m pytest tests -q
+
+  legacy-integration:
+    name: Legacy Integration Scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: unit-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r lina/requirements.txt pytest
+
+      - name: Run Phase 9-12 integration scripts
+        run: |
+          python lina/integration_tests/test_phase9.py
+          python lina/integration_tests/test_phase10.py
+          python lina/integration_tests/test_phase11.py
+          python lina/integration_tests/test_phase12.py
+
+  optional-llm-integration:
+    name: Optional LLM Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: unit-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r lina/requirements.txt pytest
+
+      - name: Run model-backed integration suite when model exists
+        run: |
+          if [ -f "lina/models/mini.gguf" ]; then
+            python lina/integration_tests/_full_run.py
+          else
+            echo "⚠ Skipping _full_run.py (no GGUF model found)"
+          fi
+
+  lint:
+    name: Syntax Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Compile all Python files
+        run: |
+          find lina -name '*.py' -exec python -m py_compile {} \;
+          echo "✅ All Python files compile successfully"

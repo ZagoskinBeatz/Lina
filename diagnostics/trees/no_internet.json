@@ -1,0 +1,92 @@
+{
+  "id": "no_internet",
+  "name": "Нет интернета (WiFi подключён)",
+  "category": "network",
+  "triggers": [
+    "нет интернета", "интернет не работает", "no internet",
+    "wifi подключён но нет интернета", "нет доступа к интернету",
+    "не могу выйти в интернет", "сайты не открываются"
+  ],
+  "steps": [
+    {
+      "id": "check_ping_ip",
+      "description": "Пинг внешнего IP (без DNS)",
+      "check": "ping -c 1 -W 3 8.8.8.8 2>/dev/null",
+      "parse": "time=",
+      "if_match": {
+        "next": "check_dns_resolve"
+      },
+      "if_no_match": {"next": "check_gateway"}
+    },
+    {
+      "id": "check_gateway",
+      "description": "Проверка шлюза (gateway)",
+      "check": "ip route | grep default | head -1",
+      "parse": "default via",
+      "if_match": {
+        "next": "ping_gateway"
+      },
+      "if_no_match": {
+        "diagnosis": "Нет шлюза по умолчанию (default gateway)",
+        "solution": "Переподключитесь к сети: nmcli connection down <name> && nmcli connection up <name>. Или вручную: sudo ip route add default via <GATEWAY_IP>",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      }
+    },
+    {
+      "id": "ping_gateway",
+      "description": "Пинг шлюза",
+      "check": "ping -c 1 -W 2 $(ip route | grep default | awk '{print $3}') 2>/dev/null",
+      "parse": "time=",
+      "if_match": {
+        "diagnosis": "Шлюз доступен, но интернет — нет. Проблема на роутере или у провайдера.",
+        "solution": "1) Перезагрузите роутер\n2) Проверьте: traceroute 8.8.8.8\n3) Свяжитесь с провайдером",
+        "severity": "high",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Шлюз недоступен — проблема на уровне локальной сети",
+        "solution": "Проверьте кабель/WiFi подключение. Переподключитесь к сети. Проверьте настройки роутера.",
+        "severity": "high",
+        "next": null
+      }
+    },
+    {
+      "id": "check_dns_resolve",
+      "description": "Проверка DNS",
+      "check": "nslookup google.com 2>/dev/null",
+      "parse": "Address.*[0-9]",
+      "if_match": {
+        "next": "check_http"
+      },
+      "if_no_match": {
+        "diagnosis": "DNS не работает — IP-доступ есть, но имена не разрешаются",
+        "solution": "Временное решение: echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf\nПостоянное: настройте DNS в NetworkManager или systemd-resolved.",
+        "explanation": "Пакеты идут, но DNS-сервер не отвечает. Частая проблема с systemd-resolved или resolvconf.",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      }
+    },
+    {
+      "id": "check_http",
+      "description": "Проверка HTTP-доступа",
+      "check": "curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://google.com 2>/dev/null",
+      "parse": "200|301|302",
+      "if_match": {
+        "diagnosis": "Интернет работает нормально (ping, DNS, HTTP — всё ОК)",
+        "solution": "Если конкретный сайт не открывается — возможно, он заблокирован или недоступен. Попробуйте VPN.",
+        "severity": "info",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Ping и DNS работают, но HTTP заблокирован. Возможно, прокси или firewall.",
+        "solution": "Проверьте: echo $http_proxy $https_proxy. Проверьте firewall: sudo iptables -L -n",
+        "severity": "medium",
+        "requires_root": false,
+        "next": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "id": "update_broke_system",
+  "name": "Обновление сломало систему",
+  "category": "system",
+  "triggers": [
+    "обновление сломало", "после обновления не работает",
+    "update broke system", "система сломалась после обновления",
+    "откатить обновление", "broken after update"
+  ],
+  "steps": [
+    {
+      "id": "check_recent_update",
+      "description": "Проверка последних обновлений",
+      "check": "tail -30 /var/log/pacman.log 2>/dev/null || tail -30 /var/log/apt/history.log 2>/dev/null || tail -30 /var/log/dnf.log 2>/dev/null",
+      "parse": "upgraded|installed|Upgrade:|Install:",
+      "if_match": {
+        "next": "check_failed_svcs"
+      },
+      "if_no_match": {
+        "diagnosis": "Не удалось найти лог обновлений",
+        "solution": "Проверьте вручную: pacman.log / apt history / dnf history",
+        "severity": "info",
+        "next": null
+      }
+    },
+    {
+      "id": "check_failed_svcs",
+      "description": "Проверка упавших сервисов после обновления",
+      "check": "systemctl --failed --no-pager --no-legend 2>/dev/null",
+      "parse": "failed",
+      "if_match": {
+        "diagnosis": "После обновления упали сервисы",
+        "solution": "Перезапустите: sudo systemctl restart СЕРВИС. Если не помогает — смотрите логи: journalctl -u СЕРВИС -b",
+        "severity": "high",
+        "requires_root": true,
+        "next": "check_orphans"
+      },
+      "if_no_match": {"next": "check_orphans"}
+    },
+    {
+      "id": "check_orphans",
+      "description": "Проверка осиротевших пакетов",
+      "check": "pacman -Qdt 2>/dev/null || apt list --installed 2>/dev/null | grep -c '' | head -1",
+      "parse": ".*",
+      "if_match": {
+        "next": "check_broken_deps"
+      },
+      "if_no_match": {"next": "check_broken_deps"}
+    },
+    {
+      "id": "check_broken_deps",
+      "description": "Проверка сломанных зависимостей",
+      "check": "pacman -Dk 2>/dev/null || apt-get check 2>&1 || dnf check 2>/dev/null",
+      "parse": "broken|missing|unresolvable|error",
+      "if_match": {
+        "diagnosis": "Сломанные зависимости пакетов",
+        "solution": "Arch: sudo pacman -Syu (повторная синхронизация). Debian/Ubuntu: sudo apt --fix-broken install. Fedora: sudo dnf distro-sync",
+        "explanation": "Частичное обновление или прерванная установка оставили пакеты в несогласованном состоянии.",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {"next": "check_kernel_mismatch"}
+    },
+    {
+      "id": "check_kernel_mismatch",
+      "description": "Проверка соответствия загруженного ядра и модулей",
+      "check": "uname -r && ls /lib/modules/ 2>/dev/null | tail -3",
+      "parse": ".*",
+      "if_match": {
+        "diagnosis": "Рекомендуется перезагрузка — ядро могло обновиться",
+        "solution": "sudo reboot. Если после обновления ядра модули не собрались — проверьте dkms: dkms status",
+        "explanation": "После обновления ядра нужна перезагрузка. Модули (nvidia, virtualbox, etc.) могут не загрузиться без пересборки через dkms.",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Не удалось определить причину. Рекомендуется: откат через timeshift или btrfs snapshot.",
+        "solution": "sudo timeshift --restore (если настроен). Для btrfs: загрузитесь со snapshot.",
+        "severity": "medium",
+        "next": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Lina AI Assistant
+Name[ru]=Lina — ИИ-ассистент
+Comment=Start Lina AI assistant on login
+Comment[ru]=Запускать Lina при входе в систему
+Exec=python3 -m lina.gui.app --minimized
+Icon=utilities-terminal
+Type=Application
+Categories=Utility;System;
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel
+Hidden=false

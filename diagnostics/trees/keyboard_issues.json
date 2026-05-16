@@ -1,0 +1,76 @@
+{
+  "id": "keyboard_issues",
+  "name": "Проблемы с клавиатурой",
+  "triggers": ["клавиатура не работает", "не нажимаются клавиши", "keyboard not working", "раскладка не переключается", "layout switch"],
+  "description": "Диагностика проблем с клавиатурой и раскладкой",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "cat /proc/bus/input/devices 2>/dev/null | grep -A4 -i keyboard | head -20",
+      "parse": "keyboard",
+      "if_match": {
+        "diagnosis": "Клавиатура обнаружена ядром",
+        "next": "step_2"
+      },
+      "if_no_match": {
+        "diagnosis": "Клавиатура не обнаружена ядром! Возможна аппаратная проблема.",
+        "solution": "Проверьте подключение. Для USB: lsusb. Для Bluetooth: bluetoothctl devices.",
+        "next": null
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "setxkbmap -query 2>/dev/null || localectl status 2>/dev/null",
+      "parse": "layout|keymap",
+      "if_match": {
+        "diagnosis": "Раскладка клавиатуры настроена",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "Не удалось определить раскладку",
+        "next": "step_3"
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "localectl status 2>/dev/null",
+      "parse": ".*",
+      "if_match": {
+        "diagnosis": "Информация о локали и раскладке получена",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "gsettings get org.gnome.desktop.input-sources xkb-options 2>/dev/null || echo 'not GNOME'",
+      "parse": "grp:",
+      "if_match": {
+        "diagnosis": "Настроено переключение раскладки через GNOME",
+        "suggestion": "Для смены комбинации: gsettings set org.gnome.desktop.input-sources xkb-options \"['grp:alt_shift_toggle']\"",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Не GNOME или переключение не настроено",
+        "next": "step_5"
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "echo $XDG_SESSION_TYPE",
+      "parse": "wayland",
+      "if_match": {
+        "diagnosis": "Wayland-сессия. Переключение раскладки настраивается через DE.",
+        "solution": "KDE Plasma: Системные настройки → Ввод → Раскладки. Для setxkbmap на Wayland используйте настройки DE.",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "X11-сессия. Можно настроить через setxkbmap.",
+        "solution": "Добавьте переключение: setxkbmap -layout 'us,ru' -option 'grp:alt_shift_toggle'. Для постоянного эффекта добавьте в ~/.xinitrc или /etc/X11/xorg.conf.d/",
+        "next": null
+      }
+    }
+  ]
+}

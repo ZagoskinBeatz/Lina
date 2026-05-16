@@ -1,0 +1,46 @@
+name: security_audit
+description: "Быстрый аудит безопасности: открытые порты, SUID, пользователи, firewall"
+trigger: null
+variables:
+  report_file: "/tmp/lina_security_audit.txt"
+steps:
+  - action: shell
+    params:
+      command: "echo '=== Lina Security Audit ===' > {{ report_file }} && date >> {{ report_file }}"
+      description: "Инициализация отчёта"
+
+  - action: shell
+    params:
+      command: "echo '\n--- Открытые порты ---' >> {{ report_file }} && ss -tlnp >> {{ report_file }} 2>&1"
+      description: "Проверка открытых портов"
+
+  - action: shell
+    params:
+      command: "echo '\n--- SUID файлы ---' >> {{ report_file }} && find / -perm -4000 -type f 2>/dev/null | head -50 >> {{ report_file }}"
+      sudo: true
+      description: "Поиск SUID файлов"
+      on_error: continue
+
+  - action: shell
+    params:
+      command: "echo '\n--- Пользователи с shell ---' >> {{ report_file }} && grep -v '/nologin\\|/false' /etc/passwd >> {{ report_file }}"
+      description: "Список пользователей с shell"
+
+  - action: shell
+    params:
+      command: "echo '\n--- Статус firewall ---' >> {{ report_file }} && (ufw status 2>/dev/null || iptables -L -n 2>/dev/null || echo 'firewall не обнаружен') >> {{ report_file }}"
+      sudo: true
+      description: "Статус firewall"
+      on_error: continue
+
+  - action: shell
+    params:
+      command: "echo '\n--- Неудачные входы (последние 20) ---' >> {{ report_file }} && journalctl _SYSTEMD_UNIT=sshd.service -n 20 --no-pager 2>/dev/null >> {{ report_file }}"
+      description: "Последние неудачные входы"
+      on_error: continue
+
+  - action: notify
+    params:
+      title: "Аудит завершён"
+      body: "Отчёт сохранён: {{ report_file }}"
+      urgency: normal

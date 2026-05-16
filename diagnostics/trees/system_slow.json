@@ -1,0 +1,83 @@
+{
+  "id": "system_slow",
+  "name": "Система тормозит",
+  "category": "performance",
+  "triggers": [
+    "система тормозит", "компьютер медленный", "тормозит",
+    "system slow", "лагает", "всё тормозит", "медленно работает",
+    "высокая нагрузка", "тормоза"
+  ],
+  "steps": [
+    {
+      "id": "check_load",
+      "description": "Проверка средней нагрузки (load average)",
+      "check": "cat /proc/loadavg && echo CORES=$(nproc)",
+      "parse": "[0-9]",
+      "if_match": {
+        "next": "check_cpu_hogs"
+      },
+      "if_no_match": {"next": "check_cpu_hogs"}
+    },
+    {
+      "id": "check_cpu_hogs",
+      "description": "Поиск процессов с высоким CPU",
+      "check": "ps aux --sort=-%cpu 2>/dev/null | head -6",
+      "parse": "[0-9]",
+      "if_match": {
+        "next": "check_memory"
+      },
+      "if_no_match": {"next": "check_memory"}
+    },
+    {
+      "id": "check_memory",
+      "description": "Проверка давления RAM",
+      "check": "free -h 2>/dev/null",
+      "parse": "Mem:",
+      "if_match": {
+        "next": "check_swap_usage"
+      },
+      "if_no_match": {"next": "check_swap_usage"}
+    },
+    {
+      "id": "check_swap_usage",
+      "description": "Проверка swap (подкачки)",
+      "check": "swapon --show 2>/dev/null",
+      "parse": "[0-9]",
+      "if_match": {
+        "next": "check_iowait"
+      },
+      "if_no_match": {"next": "check_iowait"}
+    },
+    {
+      "id": "check_iowait",
+      "description": "Проверка I/O wait (ожидание диска)",
+      "check": "cat /proc/stat | head -1",
+      "parse": "cpu ",
+      "if_match": {
+        "next": "check_disk_health"
+      },
+      "if_no_match": {"next": "check_disk_health"}
+    },
+    {
+      "id": "check_disk_health",
+      "description": "Проверка здоровья диска",
+      "check": "dmesg -T 2>/dev/null | grep -i 'error\\|i/o\\|sector' | tail -5",
+      "parse": "error|I/O|sector",
+      "if_match": {
+        "diagnosis": "Обнаружены ошибки диска — это может вызывать тормоза",
+        "solution": "Проверьте SMART: sudo smartctl -a /dev/sda. Если диск умирает — срочно сделайте бекап.",
+        "severity": "critical",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Система под нагрузкой. Возможные причины: много процессов, мало RAM, медленный диск.",
+        "solution": "1) Найдите тяжёлый процесс: top -b -n1 | head -15\n2) Если мало RAM: закройте лишнее или добавьте swap: sudo fallocate -l 4G /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile\n3) Для HDD: рассмотрите SSD\n4) Отключите ненужные сервисы: systemctl list-unit-files --state=enabled",
+        "explanation": "Тормоза бывают от: 1) CPU-bound процессов, 2) нехватки RAM (swap thrashing), 3) медленного I/O, 4) слишком многих запущенных сервисов.",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      }
+    }
+  ]
+}

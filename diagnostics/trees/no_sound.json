@@ -1,0 +1,107 @@
+{
+  "id": "no_sound",
+  "name": "Нет звука",
+  "category": "audio",
+  "triggers": [
+    "нет звука", "звук не работает", "no sound", "нет аудио",
+    "не слышу звук", "пропал звук", "звук пропал", "тихо"
+  ],
+  "steps": [
+    {
+      "id": "check_pipewire",
+      "description": "Проверка PipeWire",
+      "check": "systemctl --user is-active pipewire 2>/dev/null",
+      "parse": "^active$",
+      "if_match": {
+        "next": "check_sinks"
+      },
+      "if_no_match": {"next": "check_pulseaudio"}
+    },
+    {
+      "id": "check_pulseaudio",
+      "description": "Проверка PulseAudio",
+      "check": "systemctl --user is-active pulseaudio 2>/dev/null || pulseaudio --check 2>/dev/null && echo active",
+      "parse": "active",
+      "if_match": {
+        "next": "check_sinks"
+      },
+      "if_no_match": {
+        "diagnosis": "Аудио-сервер не запущен (ни PipeWire, ни PulseAudio)",
+        "solution": "systemctl --user start pipewire pipewire-pulse wireplumber",
+        "explanation": "Без аудио-сервера звук не будет воспроизводиться. PipeWire — современная замена PulseAudio.",
+        "severity": "high",
+        "requires_root": false,
+        "next": null
+      }
+    },
+    {
+      "id": "check_sinks",
+      "description": "Проверка устройств вывода (sinks)",
+      "check": "pactl list sinks short 2>/dev/null || wpctl status 2>/dev/null | head -20",
+      "parse": "RUNNING|IDLE|SUSPENDED|Audio/Sink",
+      "if_match": {
+        "next": "check_mute"
+      },
+      "if_no_match": {
+        "diagnosis": "Нет доступных устройств вывода звука",
+        "solution": "Проверьте ALSA: aplay -l. Если модули не загружены: sudo modprobe snd_hda_intel",
+        "explanation": "Аудио-сервер работает, но не видит устройств. Возможно, не загружен ALSA-модуль.",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      }
+    },
+    {
+      "id": "check_mute",
+      "description": "Проверка — не замьючен ли звук",
+      "check": "pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null || amixer get Master 2>/dev/null",
+      "parse": "Mute: yes|\\[off\\]",
+      "if_match": {
+        "diagnosis": "Звук замьючен (отключён)",
+        "solution": "pactl set-sink-mute @DEFAULT_SINK@ 0 или amixer set Master unmute",
+        "explanation": "Устройство вывода найдено, но звук отключён (mute). Просто включите его.",
+        "severity": "low",
+        "requires_root": false,
+        "next": null
+      },
+      "if_no_match": {"next": "check_volume"}
+    },
+    {
+      "id": "check_volume",
+      "description": "Проверка громкости",
+      "check": "pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null || amixer get Master 2>/dev/null",
+      "parse": "0%|\\[0%\\]",
+      "if_match": {
+        "diagnosis": "Громкость на нуле",
+        "solution": "pactl set-sink-volume @DEFAULT_SINK@ 70% или amixer set Master 70%",
+        "explanation": "Звук не замьючен, но громкость 0%. Увеличьте громкость.",
+        "severity": "low",
+        "requires_root": false,
+        "next": null
+      },
+      "if_no_match": {"next": "check_alsa"}
+    },
+    {
+      "id": "check_alsa",
+      "description": "Проверка ALSA-модулей",
+      "check": "lsmod | grep snd",
+      "parse": "snd",
+      "if_match": {
+        "diagnosis": "Аудио-подсистема работает, но звука нет. Проверьте правильность выбранного устройства.",
+        "solution": "pavucontrol (GUI) или: pactl list sinks — проверьте, какой sink активен. Смените: pactl set-default-sink <name>",
+        "explanation": "Все компоненты работают. Вероятно, выбрано неверное устройство вывода (например, HDMI вместо динамиков).",
+        "severity": "medium",
+        "requires_root": false,
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "ALSA-модули не загружены — звуковая карта не инициализирована",
+        "solution": "sudo modprobe snd_hda_intel && systemctl --user restart pipewire",
+        "explanation": "Ядро не загрузило драйвер звуковой карты. Попробуйте загрузить вручную.",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      }
+    }
+  ]
+}

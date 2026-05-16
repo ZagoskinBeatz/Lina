@@ -1,0 +1,45 @@
+name: system_update
+description: "Полное обновление системы с уведомлением и откатом при ошибке"
+trigger: null
+variables:
+  reboot_on_kernel: false
+  notify_on_complete: true
+steps:
+  - action: shell
+    params:
+      command: "pacman -Syu --noconfirm"
+      sudo: true
+      description: "Обновление пакетов (pacman)"
+      condition: "which pacman"
+      on_error: abort
+
+  - action: shell
+    params:
+      command: "apt-get update && apt-get upgrade -y"
+      sudo: true
+      description: "Обновление пакетов (apt)"
+      condition: "which apt-get"
+      on_error: abort
+
+  - action: shell
+    params:
+      command: "dnf upgrade -y"
+      sudo: true
+      description: "Обновление пакетов (dnf)"
+      condition: "which dnf"
+      on_error: abort
+
+  - action: shell
+    params:
+      command: "flatpak update -y"
+      sudo: false
+      description: "Обновление Flatpak"
+      condition: "which flatpak"
+      on_error: continue
+
+  - action: notify
+    params:
+      title: "Обновление завершено"
+      body: "Все пакеты обновлены"
+      urgency: normal
+    condition: "{{ notify_on_complete }}"

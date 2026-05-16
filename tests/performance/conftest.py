@@ -1,0 +1,2 @@
+# conftest.py — skip tests that import deleted runtime_v2 modules
+collect_ignore_glob = ["test_performance_v2.py"]

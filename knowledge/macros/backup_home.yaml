@@ -1,0 +1,36 @@
+name: backup_home
+description: "Резервное копирование домашней директории с исключениями"
+trigger: null
+variables:
+  backup_dest: "/mnt/backup/home"
+  exclude_dirs: ".cache,.local/share/Trash,node_modules,.venv,__pycache__"
+  compression: true
+steps:
+  - action: check
+    params:
+      condition: "test -d {{ backup_dest }}"
+      message: "Директория назначения {{ backup_dest }} не найдена"
+      on_fail: abort
+
+  - action: shell
+    params:
+      command: >
+        rsync -avz --progress --delete
+        --exclude={{{ exclude_dirs }}}
+        "$HOME/" "{{ backup_dest }}/$(date +%Y-%m-%d)/"
+      sudo: false
+      description: "Синхронизация домашней директории"
+      timeout: 3600
+
+  - action: shell
+    params:
+      command: >
+        ls -dt {{ backup_dest }}/*/ | tail -n +4 | xargs rm -rf
+      sudo: false
+      description: "Удаление старых бэкапов (оставить 3 последних)"
+
+  - action: notify
+    params:
+      title: "Бэкап завершён"
+      body: "Домашняя директория скопирована в {{ backup_dest }}"
+      urgency: normal

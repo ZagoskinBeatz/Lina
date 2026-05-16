@@ -1,0 +1,79 @@
+{
+  "id": "printer_not_working",
+  "name": "Принтер не работает",
+  "triggers": ["принтер не печатает", "не видит принтер", "printer not found", "cups error", "не работает печать"],
+  "description": "Диагностика проблем с печатью (CUPS)",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "systemctl is-active cups 2>/dev/null || systemctl is-active cups.service 2>/dev/null",
+      "parse": "^active$",
+      "if_match": {
+        "diagnosis": "Служба CUPS запущена",
+        "next": "step_2"
+      },
+      "if_no_match": {
+        "diagnosis": "Служба CUPS не запущена!",
+        "solution": "Запустите: sudo systemctl enable --now cups",
+        "next": "step_2"
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "lpstat -p 2>/dev/null",
+      "parse": "printer",
+      "if_match": {
+        "diagnosis": "Принтеры обнаружены в системе",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "Принтеры не найдены",
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "lpstat -p 2>/dev/null",
+      "parse": "disabled|stopped",
+      "if_match": {
+        "diagnosis": "Принтер отключён или приостановлен",
+        "solution": "Включите принтер: sudo cupsenable <имя_принтера> && sudo accept <имя_принтера>",
+        "next": "step_5"
+      },
+      "if_no_match": {
+        "diagnosis": "Принтер активен",
+        "next": "step_5"
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "lsusb 2>/dev/null | grep -i 'print\\|hp\\|canon\\|epson\\|brother\\|samsung\\|xerox'",
+      "parse": ".",
+      "if_match": {
+        "diagnosis": "USB-принтер подключён физически, но не настроен в CUPS",
+        "solution": "Откройте http://localhost:631 для настройки принтера через веб-интерфейс CUPS. Или установите драйвер: gutenprint для большинства принтеров.",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Принтер не обнаружен на USB. Если сетевой — проверьте подключение.",
+        "solution": "Для USB: проверьте кабель. Для сетевого: добавьте через CUPS (http://localhost:631).",
+        "next": null
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "lpstat -W completed 2>/dev/null | tail -3",
+      "parse": "completed",
+      "if_match": {
+        "diagnosis": "Есть завершённые задания печати. Печать работала ранее.",
+        "suggestion": "Проверьте очередь: lpq. Отмените зависшие задания: cancel -a",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Нет завершённых заданий. Попробуйте тестовую печать через CUPS.",
+        "solution": "Тестовая печать: lp /usr/share/cups/data/testprint",
+        "next": null
+      }
+    }
+  ]
+}

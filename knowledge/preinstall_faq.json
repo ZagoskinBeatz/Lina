@@ -1,0 +1,37 @@
+[
+  {
+    "question": "Какой раздел нужен для установки?",
+    "answer": "Минимум: корневой раздел (/) — 20+ GB, ext4 или btrfs. Рекомендуется: отдельный /home для данных и swap (2-8 GB). Для UEFI: EFI раздел 512 MB, FAT32.",
+    "views": 0
+  },
+  {
+    "question": "UEFI или BIOS — в чём разница?",
+    "answer": "UEFI — современный способ загрузки, поддерживает GPT-таблицу разделов, Secure Boot, быструю загрузку. Большинство ПК с 2012+ используют UEFI. BIOS (Legacy) — старый способ, MBR-таблица, ограничение 4 основных раздела.",
+    "views": 0
+  },
+  {
+    "question": "Какую файловую систему выбрать?",
+    "answer": "ext4 — проверенная, надёжная, подходит для большинства. btrfs — снапшоты, сжатие, но сложнее. XFS — высокая производительность для больших файлов. Для /boot/efi — только FAT32.",
+    "views": 0
+  },
+  {
+    "question": "Нужен ли swap?",
+    "answer": "Да, особенно если RAM < 8 GB. Swap = подстраховка при нехватке RAM. Рекомендации: RAM ≤ 4 GB → swap 4 GB; RAM 8 GB → swap 4-8 GB; RAM 16+ GB → swap 2-4 GB или swapfile. Для гибернации: swap ≥ размер RAM.",
+    "views": 0
+  },
+  {
+    "question": "Как установить драйверы NVIDIA?",
+    "answer": "1. При установке: выберите 'Установить проприетарные драйверы'. 2. После установки: sudo apt install nvidia-driver (Debian/Ubuntu) или sudo pacman -S nvidia (Arch). 3. Перезагрузитесь и проверьте: nvidia-smi. Если Secure Boot — настройте MOK (Machine Owner Key).",
+    "views": 0
+  },
+  {
+    "question": "Можно ли сохранить Windows при установке Linux?",
+    "answer": "Да, это dual boot. Шаги: 1) Уменьшите раздел Windows в Disk Management. 2) Установите Linux на свободное место. 3) GRUB автоматически обнаружит Windows. Важно: сначала Windows, потом Linux. Отключите Fast Startup в Windows.",
+    "views": 0
+  },
+  {
+    "question": "Тестовый вопрос?",
+    "answer": "Тестовый ответ",
+    "views": 171
+  }
+]

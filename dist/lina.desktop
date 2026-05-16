@@ -1,0 +1,24 @@
+[Desktop Entry]
+Name=Lina
+GenericName=AI Assistant
+Comment=Локальный ИИ-помощник для Linux
+Comment[en]=Local AI assistant for Linux
+Exec=lina --gui
+Icon=lina
+Terminal=false
+Type=Application
+Categories=Utility;System;
+Keywords=AI;assistant;Linux;help;terminal;
+StartupNotify=true
+StartupWMClass=lina
+Actions=oneshot;daemon;
+
+[Desktop Action oneshot]
+Name=Задать вопрос
+Name[en]=Ask a Question
+Exec=lina --gui --oneshot
+
+[Desktop Action daemon]
+Name=Запустить в фоне
+Name[en]=Start Daemon
+Exec=lina --daemon

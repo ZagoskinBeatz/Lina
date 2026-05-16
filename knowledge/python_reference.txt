@@ -1,0 +1,41 @@
+# Python — Краткая справка
+
+## Основы
+- Переменные: x = 10, name = "Lina"
+- Типы данных: int, float, str, list, dict, tuple, set, bool
+- f-строки: f"Привет, {name}!"
+
+## Управляющие конструкции
+- if/elif/else — условия
+- for item in collection — цикл по коллекции
+- while условие — цикл с условием
+- try/except/finally — обработка ошибок
+
+## Функции
+- def my_func(arg1, arg2="default"): ...
+- lambda x: x * 2 — анонимные функции
+- *args, **kwargs — переменное число аргументов
+
+## Работа с файлами
+- open("file.txt", "r") — чтение
+- open("file.txt", "w") — запись
+- with open(...) as f: — контекстный менеджер
+- pathlib.Path — современная работа с путями
+
+## Полезные модули стандартной библиотеки
+- os — работа с ОС
+- sys — системные параметры
+- json — работа с JSON
+- subprocess — запуск внешних программ
+- pathlib — работа с путями
+- datetime — дата и время
+- re — регулярные выражения
+- collections — расширенные коллекции
+- itertools — итераторы
+
+## Виртуальные окружения
+- python -m venv myenv
+- source myenv/bin/activate
+- pip install пакет
+- pip freeze > requirements.txt
+- pip install -r requirements.txt

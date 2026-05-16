@@ -1,0 +1,77 @@
+{
+  "id": "permission_denied",
+  "name": "Ошибка доступа (Permission Denied)",
+  "triggers": ["permission denied", "нет доступа", "отказано в доступе", "нет прав", "cannot open", "operation not permitted"],
+  "description": "Диагностика проблем с правами доступа к файлам и каталогам",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "id",
+      "parse": "uid=0",
+      "if_match": {
+        "diagnosis": "Вы работаете под root. Проблема не в обычных правах.",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "diagnosis": "Работа от обычного пользователя",
+        "next": "step_2"
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "groups",
+      "parse": "wheel|sudo",
+      "if_match": {
+        "diagnosis": "Пользователь в группе sudo/wheel. Можно использовать sudo.",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "Пользователь НЕ в группе sudo/wheel!",
+        "solution": "Добавьте пользователя в группу sudo: su -c 'usermod -aG wheel <user>'",
+        "next": "step_3"
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "sudo -n true 2>&1",
+      "parse": "password is required|sorry",
+      "if_match": {
+        "diagnosis": "sudo требует пароль (нормальное поведение)",
+        "suggestion": "Используйте sudo перед командой, требующей повышенных привилегий.",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "diagnosis": "sudo работает без пароля (NOPASSWD настроен)",
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "mount | grep 'nosuid\\|noexec\\|ro '",
+      "parse": "nosuid|noexec|ro ",
+      "if_match": {
+        "diagnosis": "Обнаружены файловые системы с ограничениями (nosuid/noexec/ro).",
+        "solution": "Если файл на ro-разделе, перемонтируйте: sudo mount -o remount,rw /раздел",
+        "next": "step_5"
+      },
+      "if_no_match": {
+        "next": "step_5"
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "getenforce 2>/dev/null || echo 'SELinux not installed'",
+      "parse": "Enforcing",
+      "if_match": {
+        "diagnosis": "SELinux в режиме Enforcing. Может блокировать доступ.",
+        "solution": "Проверьте аудит: ausearch -m AVC -ts recent. Для временного отключения: sudo setenforce 0",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "SELinux не блокирует. Проверьте права файла: ls -la /путь/к/файлу",
+        "solution": "Исправьте права: chmod 644 файл (для файла) или chmod 755 каталог (для каталога). Или смените владельца: chown $USER файл.",
+        "next": null
+      }
+    }
+  ]
+}

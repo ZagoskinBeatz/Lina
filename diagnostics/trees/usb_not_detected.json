@@ -1,0 +1,69 @@
+{
+  "id": "usb_not_detected",
+  "name": "USB-устройство не определяется",
+  "category": "hardware",
+  "triggers": [
+    "usb не определяется", "usb не работает", "флешка не видна",
+    "usb not detected", "usb device not found",
+    "не видит usb", "не распознаёт usb"
+  ],
+  "steps": [
+    {
+      "id": "check_lsusb",
+      "description": "Проверка — видит ли система USB-устройство",
+      "check": "lsusb 2>/dev/null",
+      "parse": "Bus",
+      "if_match": {
+        "next": "check_dmesg_usb"
+      },
+      "if_no_match": {
+        "diagnosis": "USB-подсистема не работает (lsusb пуст)",
+        "solution": "Проверьте модули: lsmod | grep usb. Загрузите: sudo modprobe xhci_hcd uhci_hcd ehci_hcd",
+        "severity": "critical",
+        "requires_root": true,
+        "next": null
+      }
+    },
+    {
+      "id": "check_dmesg_usb",
+      "description": "Проверка dmesg на USB-события",
+      "check": "dmesg -T 2>/dev/null | grep -i usb | tail -10",
+      "parse": "usb",
+      "if_match": {
+        "next": "check_block_device"
+      },
+      "if_no_match": {"next": "check_block_device"}
+    },
+    {
+      "id": "check_block_device",
+      "description": "Проверка блочных устройств (для флешек)",
+      "check": "lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT 2>/dev/null",
+      "parse": "disk|part",
+      "if_match": {
+        "next": "check_mount"
+      },
+      "if_no_match": {"next": "check_mount"}
+    },
+    {
+      "id": "check_mount",
+      "description": "Проверка автомонтирования",
+      "check": "udisksctl status 2>/dev/null || systemctl is-active udisks2 2>/dev/null",
+      "parse": "MODEL|active",
+      "if_match": {
+        "diagnosis": "USB-подсистема работает. Устройство может не монтироваться автоматически.",
+        "solution": "Смонтируйте вручную: sudo mount /dev/sdX1 /mnt. Найдите устройство: lsblk. Если ФС повреждена: sudo fsck /dev/sdX1",
+        "explanation": "Если файловый менеджер не монтирует автоматически — проверьте udisks2 и gvfs. Для NTFS: установите ntfs-3g.",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "udisks2 не запущен — автомонтирование не работает",
+        "solution": "sudo systemctl start udisks2 && sudo systemctl enable udisks2. Для автомонтирования в DE: убедитесь что gvfs установлен.",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      }
+    }
+  ]
+}

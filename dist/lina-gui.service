@@ -1,0 +1,17 @@
+[Unit]
+Description=Lina — AI-помощник (GUI)
+Documentation=man:lina(1)
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/lina --gui
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+
+# Ресурсы
+MemoryMax=8G
+
+[Install]
+WantedBy=default.target

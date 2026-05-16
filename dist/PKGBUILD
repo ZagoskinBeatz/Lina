@@ -1,0 +1,80 @@
+# Maintainer: zbeatz
+pkgname=lina
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Lina — локальный ИИ-помощник для Linux (оффлайн, LLM)"
+arch=('any')
+url="https://github.com/zbeatz/lina"
+license=('MIT')
+depends=(
+    'python>=3.10'
+    'python-numpy'
+)
+optdepends=(
+    'python-pyqt6: GUI-интерфейс'
+    'espeak-ng: синтез речи (TTS, базовый)'
+    'piper-tts: синтез речи (TTS, качественный)'
+    'whisper.cpp: распознавание речи (STT)'
+)
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    python -m build --wheel --no-isolation
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+    python -m installer --destdir="$pkgdir" dist/*.whl
+
+    # CLI entry point
+    install -Dm755 /dev/stdin "$pkgdir/usr/bin/lina" <<'EOF'
+#!/usr/bin/env python3
+from lina.core.cli import main
+main()
+EOF
+
+    # systemd user service
+    install -Dm644 lina/dist/lina@.service \
+        "$pkgdir/usr/lib/systemd/user/lina@.service"
+
+    # desktop entry
+    install -Dm644 lina/data/lina.desktop \
+        "$pkgdir/usr/share/applications/lina.desktop"
+
+    # autostart
+    install -Dm644 lina/data/lina-autostart.desktop \
+        "$pkgdir/etc/xdg/autostart/lina.desktop"
+
+    # man page
+    install -Dm644 lina/man/lina.1 \
+        "$pkgdir/usr/share/man/man1/lina.1"
+
+    # license
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # knowledge base
+    install -dm755 "$pkgdir/usr/share/lina/knowledge"
+    cp -r lina/knowledge/* "$pkgdir/usr/share/lina/knowledge/"
+
+    # diagnostic trees
+    install -dm755 "$pkgdir/usr/share/lina/diagnostics/trees"
+    cp -r lina/diagnostics/trees/* "$pkgdir/usr/share/lina/diagnostics/trees/"
+
+    # default config
+    install -Dm644 /dev/stdin "$pkgdir/etc/lina/config.yaml" <<'EOF'
+# Lina AI Assistant Configuration
+model:
+  path: /usr/share/lina/models/
+  default_tier: full
+gui:
+  theme: dark
+  tray_icon: true
+  start_minimized: false
+voice:
+  stt_enabled: false
+  tts_enabled: false
+EOF
+}

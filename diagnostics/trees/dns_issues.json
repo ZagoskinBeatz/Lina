@@ -1,0 +1,63 @@
+{
+  "id": "dns_issues",
+  "name": "Проблемы с DNS",
+  "triggers": ["dns не работает", "не резолвит имена", "не открываются сайты", "ping по ip работает а по имени нет", "dns resolution failed"],
+  "description": "Диагностика проблем с разрешением DNS-имён",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "ping -c1 -W2 8.8.8.8 2>/dev/null",
+      "parse": "1 received",
+      "if_match": {
+        "diagnosis": "Интернет работает (ping по IP успешен). Проблема вероятно в DNS.",
+        "next": "step_2"
+      },
+      "if_no_match": {
+        "diagnosis": "Нет связи даже по IP. Проблема не только в DNS.",
+        "suggestion": "Сначала решите проблему с сетевым подключением.",
+        "next": null
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "cat /etc/resolv.conf",
+      "parse": "nameserver",
+      "if_match": {
+        "diagnosis": "DNS-серверы настроены в resolv.conf",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "В /etc/resolv.conf нет DNS-серверов!",
+        "solution": "Добавьте DNS: echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf",
+        "next": null
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "resolvectl status 2>/dev/null | head -20 || systemd-resolve --status 2>/dev/null | head -10",
+      "parse": "DNS Servers|Current DNS",
+      "if_match": {
+        "diagnosis": "systemd-resolved активен",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "nslookup google.com 8.8.8.8 2>/dev/null || dig google.com @8.8.8.8 +short 2>/dev/null",
+      "parse": "Address:|[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+",
+      "if_match": {
+        "diagnosis": "Запрос к внешнему DNS (8.8.8.8) успешен. Проблема в локальном DNS.",
+        "solution": "Смените DNS-сервер на 8.8.8.8 или 1.1.1.1. Для NetworkManager: nmcli con mod <подключение> ipv4.dns '8.8.8.8 1.1.1.1'",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Даже внешний DNS не отвечает. Возможно, провайдер блокирует DNS-трафик.",
+        "solution": "Попробуйте DNS over HTTPS или смените провайдера DNS.",
+        "next": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=Lina AI Assistant
+Name[ru]=Lina — ИИ-ассистент
+GenericName=AI Assistant
+GenericName[ru]=ИИ-ассистент для Linux
+Comment=Local AI assistant for Linux — diagnostics, configuration, Q&A
+Comment[ru]=Локальный ИИ-помощник для Linux — диагностика, настройка, вопросы
+Exec=python3 -m lina.gui.app
+Icon=utilities-terminal
+Type=Application
+Categories=Utility;System;
+Keywords=AI;assistant;Linux;help;diagnostics;Lina;
+StartupNotify=true
+StartupWMClass=lina
+Terminal=false

@@ -1,0 +1,77 @@
+{
+  "id": "bluetooth_not_working",
+  "name": "Bluetooth не работает",
+  "category": "hardware",
+  "triggers": [
+    "bluetooth не работает", "нет bluetooth", "блютуз не работает",
+    "не могу подключить bluetooth", "bluetooth off",
+    "bluetooth not working", "bt не видит устройства"
+  ],
+  "steps": [
+    {
+      "id": "check_rfkill_bt",
+      "description": "Проверка RF-блокировки Bluetooth",
+      "check": "rfkill list bluetooth 2>/dev/null",
+      "parse": "Soft blocked: yes",
+      "if_match": {
+        "diagnosis": "Bluetooth заблокирован программно (rfkill)",
+        "solution": "sudo rfkill unblock bluetooth",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {"next": "check_bt_service"}
+    },
+    {
+      "id": "check_bt_service",
+      "description": "Проверка службы bluetooth",
+      "check": "systemctl is-active bluetooth 2>/dev/null",
+      "parse": "^active$",
+      "if_match": {
+        "next": "check_bt_adapter"
+      },
+      "if_no_match": {
+        "diagnosis": "Служба bluetooth не запущена",
+        "solution": "sudo systemctl start bluetooth && sudo systemctl enable bluetooth",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      }
+    },
+    {
+      "id": "check_bt_adapter",
+      "description": "Проверка наличия BT-адаптера",
+      "check": "bluetoothctl show 2>/dev/null",
+      "parse": "Controller",
+      "if_match": {
+        "next": "check_bt_powered"
+      },
+      "if_no_match": {
+        "diagnosis": "Bluetooth-адаптер не найден",
+        "solution": "Проверьте: lsusb | grep -i bluetooth. Если адаптер USB — переподключите. Если встроенный — проверьте BIOS.",
+        "severity": "high",
+        "next": null
+      }
+    },
+    {
+      "id": "check_bt_powered",
+      "description": "Проверка — включён ли адаптер",
+      "check": "bluetoothctl show 2>/dev/null",
+      "parse": "Powered: yes",
+      "if_match": {
+        "diagnosis": "Bluetooth-адаптер работает и включён. Проблема может быть в сопряжении с конкретным устройством.",
+        "solution": "Попробуйте: bluetoothctl → scan on → pair MAC → connect MAC. Для сброса: bluetoothctl remove MAC и заново.",
+        "explanation": "Если устройство не видно при scan on — убедитесь, что оно в режиме сопряжения (pairing mode).",
+        "severity": "low",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Bluetooth-адаптер есть, но выключен (Powered: no)",
+        "solution": "bluetoothctl power on. Для автовключения: добавьте AutoEnable=true в /etc/bluetooth/main.conf",
+        "severity": "medium",
+        "requires_root": false,
+        "next": null
+      }
+    }
+  ]
+}

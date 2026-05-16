@@ -1,0 +1,61 @@
+app-id: org.lina.Lina
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: lina
+
+finish-args:
+  # X11 + Wayland
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  # Audio (TTS/STT)
+  - --socket=pulseaudio
+  # Network (disabled — offline-first)
+  # - --share=network
+  # Filesystem: config + models + cache
+  - --filesystem=~/.config/lina:create
+  - --filesystem=~/.cache/lina:create
+  - --filesystem=~/.local/share/lina:create
+  # DBus (tray icon, desktop notifications)
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # System info (read-only для диагностики)
+  - --filesystem=/etc/os-release:ro
+  - --filesystem=/proc/meminfo:ro
+  - --filesystem=/proc/cpuinfo:ro
+
+modules:
+  # ── Python numpy ──
+  - name: python3-numpy
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-index --find-links="${PWD}" --prefix=/app numpy
+    sources:
+      - type: pypi
+        name: numpy
+
+  # ── Lina ──
+  - name: lina
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-deps --prefix=/app .
+      # CLI entry point
+      - install -Dm755 dist/lina-wrapper.sh /app/bin/lina
+      # Man page
+      - install -Dm644 lina/man/lina.1 /app/share/man/man1/lina.1
+      # Desktop entry
+      - install -Dm644 lina/data/lina.desktop /app/share/applications/org.lina.Lina.desktop
+      # AppData
+      - install -Dm644 lina/data/org.lina.Lina.appdata.xml /app/share/metainfo/org.lina.Lina.appdata.xml
+      # Icon
+      - install -Dm644 lina/data/icons/lina.svg /app/share/icons/hicolor/scalable/apps/org.lina.Lina.svg
+      # Knowledge base
+      - mkdir -p /app/share/lina/knowledge
+      - cp -r lina/knowledge/* /app/share/lina/knowledge/
+      # Diagnostic trees
+      - mkdir -p /app/share/lina/diagnostics/trees
+      - cp -r lina/diagnostics/trees/* /app/share/lina/diagnostics/trees/
+    sources:
+      - type: dir
+        path: ../..

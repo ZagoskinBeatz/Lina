@@ -1,0 +1,33 @@
+# Lina — ИИ-ассистент v1.0.0
+# Зависимости
+
+# === Обязательные ===
+psutil>=5.9.0           # Мониторинг системных ресурсов (CPU, RAM)
+numpy>=2.0              # BM25 + n-gram VectorStore для RAG
+
+# === Web-парсер (readability + BS4) ===
+beautifulsoup4>=4.12    # HTML parsing (fallback для readability)
+readability-lxml>=0.8   # Извлечение основного контента страниц
+requests>=2.32,<3       # HTTP-запросы (совместим с urllib3 2.x)
+urllib3>=2.0,<3         # Транспорт для requests
+charset-normalizer>=3.0,<4  # Определение кодировки
+langdetect>=1.0         # Определение языка запросов
+
+# === Обязательные для LLM (локальное выполнение) ===
+llama-cpp-python>=0.2.0     # Запуск GGUF моделей (Qwen3.5-0.8B, Qwen2.5-7B) на CPU/GPU
+
+# === Опциональные (Computer Vision) ===
+# mss>=9.0                   # Захват скриншотов экрана
+# Pillow>=10.0               # Обработка изображений
+# pytesseract>=0.3.10        # OCR (требует установки tesseract-ocr)
+# opencv-python>=4.8         # Детекция GUI элементов
+
+# === Опциональные (GUI) ===
+# PyQt6>=6.5                 # GUI интерфейс (Qt6)
+
+# === Опциональные (голос) ===
+# sounddevice>=0.4           # Запись звука с микрофона
+
+# === Опциональные (улучшения) ===
+# rich>=13.0               # Красивый вывод в консоли
+# prompt-toolkit>=3.0      # Улучшенный CLI (автодополнение, история)

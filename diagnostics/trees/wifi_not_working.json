@@ -1,0 +1,113 @@
+{
+  "id": "wifi_not_working",
+  "name": "WiFi не работает",
+  "category": "network",
+  "triggers": [
+    "wifi не работает", "нет wifi", "wifi down", "wifi отключился",
+    "не могу подключиться к wifi", "no wifi", "вайфай не работает",
+    "беспроводная сеть не работает", "wifi пропал"
+  ],
+  "steps": [
+    {
+      "id": "check_rfkill",
+      "description": "Проверка RF-блокировки WiFi",
+      "check": "rfkill list wifi 2>/dev/null",
+      "parse": "Soft blocked: yes",
+      "if_match": {
+        "diagnosis": "WiFi заблокирован программно (rfkill soft block)",
+        "solution": "sudo rfkill unblock wifi",
+        "explanation": "WiFi-адаптер отключён программно. Это может произойти после нажатия аппаратной кнопки, режима полёта, или ошибки драйвера.",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {"next": "check_rfkill_hard"}
+    },
+    {
+      "id": "check_rfkill_hard",
+      "description": "Проверка аппаратной блокировки WiFi",
+      "check": "rfkill list wifi 2>/dev/null",
+      "parse": "Hard blocked: yes",
+      "if_match": {
+        "diagnosis": "WiFi заблокирован аппаратно (Hard block)",
+        "solution": "Нажмите аппаратную кнопку/переключатель WiFi на корпусе ноутбука или используйте Fn+F-клавишу.",
+        "explanation": "Физический переключатель WiFi на корпусе выключен. Программно это исправить нельзя.",
+        "severity": "medium",
+        "requires_root": false,
+        "next": null
+      },
+      "if_no_match": {"next": "check_interface"}
+    },
+    {
+      "id": "check_interface",
+      "description": "Проверка наличия WiFi-интерфейса",
+      "check": "ip link show 2>/dev/null | grep -iE 'wl|wlan'",
+      "parse": "wl",
+      "if_match": {
+        "next": "check_interface_up"
+      },
+      "if_no_match": {
+        "diagnosis": "WiFi-адаптер не найден в системе",
+        "solution": "Проверьте: lspci | grep -i network. Если адаптер есть — нужно установить драйвер.",
+        "explanation": "Ядро Linux не обнаружило WiFi-адаптер. Возможно, нужен проприетарный драйвер (Broadcom, Realtek).",
+        "severity": "high",
+        "requires_root": false,
+        "next": null
+      }
+    },
+    {
+      "id": "check_interface_up",
+      "description": "Проверка состояния WiFi-интерфейса",
+      "check": "ip link show 2>/dev/null | grep -iE 'wl|wlan'",
+      "parse": "state DOWN",
+      "if_match": {
+        "diagnosis": "WiFi-интерфейс выключен (state DOWN)",
+        "solution": "sudo ip link set $(ip link | grep -oE 'wl\\S+' | head -1) up",
+        "explanation": "Интерфейс обнаружен, но выключен. Включение через ip link set up обычно решает проблему.",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {"next": "check_nm"}
+    },
+    {
+      "id": "check_nm",
+      "description": "Проверка NetworkManager",
+      "check": "systemctl is-active NetworkManager 2>/dev/null",
+      "parse": "^active$",
+      "if_match": {
+        "next": "check_wifi_scan"
+      },
+      "if_no_match": {
+        "diagnosis": "NetworkManager не запущен",
+        "solution": "sudo systemctl start NetworkManager && sudo systemctl enable NetworkManager",
+        "explanation": "Служба управления сетью не работает. Без неё автоматическое подключение к WiFi невозможно.",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      }
+    },
+    {
+      "id": "check_wifi_scan",
+      "description": "Поиск доступных WiFi-сетей",
+      "check": "nmcli device wifi list 2>/dev/null | head -5",
+      "parse": "SSID",
+      "if_match": {
+        "diagnosis": "WiFi-адаптер работает — сети видны. Проблема в подключении к конкретной сети.",
+        "solution": "Подключитесь вручную: nmcli device wifi connect 'ИМЯ_СЕТИ' password 'ПАРОЛЬ'",
+        "explanation": "Адаптер исправен и видит сети. Возможно, сохранённый профиль повреждён. Попробуйте подключиться заново.",
+        "severity": "low",
+        "requires_root": false,
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "WiFi-адаптер не видит сети. Возможна проблема с драйвером.",
+        "solution": "Попробуйте: sudo modprobe -r <модуль> && sudo modprobe <модуль>. Найдите модуль: lspci -k | grep -A3 Network",
+        "explanation": "Адаптер активен, но не обнаруживает сети. Часто помогает перезагрузка модуля ядра.",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      }
+    }
+  ]
+}

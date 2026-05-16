@@ -1,0 +1,76 @@
+{
+  "id": "suspend_resume_issues",
+  "name": "Проблемы со сном/гибернацией",
+  "triggers": ["не засыпает", "не просыпается", "suspend не работает", "hibernate fail", "чёрный экран после сна", "зависает после сна"],
+  "description": "Диагностика проблем с suspend/hibernate",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "cat /sys/power/state",
+      "parse": "mem|disk",
+      "if_match": {
+        "diagnosis": "Ядро поддерживает suspend (mem) и/или hibernate (disk)",
+        "next": "step_2"
+      },
+      "if_no_match": {
+        "diagnosis": "Ядро не поддерживает режимы сна!",
+        "solution": "Проверьте настройки BIOS/UEFI. Убедитесь, что ACPI включён.",
+        "next": null
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "journalctl -b -1 --no-pager 2>/dev/null | grep -i 'suspend\\|sleep\\|resume\\|wakeup' | tail -10",
+      "parse": "failed|error|timeout",
+      "if_match": {
+        "diagnosis": "Обнаружены ошибки при suspend/resume в прошлой сессии",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "Явных ошибок suspend/resume не обнаружено",
+        "next": "step_3"
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "cat /proc/swaps",
+      "parse": "/",
+      "if_match": {
+        "diagnosis": "Swap активен (необходим для hibernate)",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "diagnosis": "Swap НЕ настроен! Hibernate невозможен без swap.",
+        "solution": "Создайте swap >= размера RAM для hibernate.",
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "lspci -k 2>/dev/null | grep -A2 -i 'network\\|wifi\\|ethernet' | grep 'driver'",
+      "parse": "driver",
+      "if_match": {
+        "diagnosis": "Сетевые драйверы загружены. Некоторые драйверы могут мешать suspend.",
+        "next": "step_5"
+      },
+      "if_no_match": {
+        "next": "step_5"
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "cat /proc/acpi/wakeup 2>/dev/null | grep enabled | head -10 || echo 'ACPI wakeup not available'",
+      "parse": "enabled",
+      "if_match": {
+        "diagnosis": "Есть устройства, способные будить систему. Проверьте, не будит ли система сама себя.",
+        "solution": "Отключите ненужные wakeup-устройства: echo 'XHC0' | sudo tee /proc/acpi/wakeup (для USB). Для GPU-проблем добавьте параметр ядра: nvidia.NVreg_PreserveVideoMemoryAllocations=1",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Попробуйте sudo systemctl suspend для теста. Если экран чёрный после пробуждения — проблема в GPU-драйвере.",
+        "solution": "Для NVIDIA: установите nvidia-resume.service. Для AMD: обновите mesa. Можно попробовать параметр ядра: mem_sleep_default=deep",
+        "next": null
+      }
+    }
+  ]
+}

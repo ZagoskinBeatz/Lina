@@ -1,0 +1,50 @@
+name: dev_env_setup
+description: "Настройка окружения разработчика: Git, Python venv, Node.js"
+trigger: null
+variables:
+  project_dir: "."
+  python_version: "3.12"
+  node_version: "20"
+  git_user: ""
+  git_email: ""
+steps:
+  - action: shell
+    params:
+      command: "git init"
+      description: "Инициализация Git-репозитория"
+      condition: "test ! -d .git"
+      workdir: "{{ project_dir }}"
+
+  - action: shell
+    params:
+      command: "git config user.name '{{ git_user }}'"
+      description: "Настройка Git user.name"
+      condition: "test -n '{{ git_user }}'"
+      workdir: "{{ project_dir }}"
+
+  - action: shell
+    params:
+      command: "git config user.email '{{ git_email }}'"
+      description: "Настройка Git user.email"
+      condition: "test -n '{{ git_email }}'"
+      workdir: "{{ project_dir }}"
+
+  - action: shell
+    params:
+      command: "python{{ python_version }} -m venv .venv && .venv/bin/pip install --upgrade pip setuptools wheel"
+      description: "Создание Python venv"
+      condition: "which python{{ python_version }}"
+      workdir: "{{ project_dir }}"
+
+  - action: shell
+    params:
+      command: "echo '.venv/\n__pycache__/\n*.pyc\nnode_modules/\n.env' > .gitignore"
+      description: "Создание .gitignore"
+      condition: "test ! -f .gitignore"
+      workdir: "{{ project_dir }}"
+
+  - action: notify
+    params:
+      title: "Окружение готово"
+      body: "Проект инициализирован в {{ project_dir }}"
+      urgency: low

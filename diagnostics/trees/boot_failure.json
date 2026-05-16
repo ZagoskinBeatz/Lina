@@ -1,0 +1,87 @@
+{
+  "id": "boot_failure",
+  "name": "Система не загружается",
+  "category": "system",
+  "triggers": [
+    "система не грузится", "не загружается", "boot failure",
+    "чёрный экран при загрузке", "застрял на загрузке",
+    "grub error", "kernel panic", "не запускается linux"
+  ],
+  "steps": [
+    {
+      "id": "check_journal_boot",
+      "description": "Проверка ошибок последней загрузки",
+      "check": "journalctl -b -p err --no-pager -n 10 2>/dev/null",
+      "parse": "error|fail|panic|critical",
+      "if_match": {
+        "diagnosis": "Обнаружены ошибки при загрузке",
+        "next": "check_failed_services"
+      },
+      "if_no_match": {"next": "check_failed_services"}
+    },
+    {
+      "id": "check_failed_services",
+      "description": "Проверка упавших служб",
+      "check": "systemctl --failed --no-pager --no-legend 2>/dev/null",
+      "parse": "failed",
+      "if_match": {
+        "diagnosis": "Есть упавшие systemd-сервисы, которые могут мешать загрузке",
+        "solution": "Посмотрите логи конкретного сервиса: journalctl -u СЕРВИС -b. Для временного отключения: sudo systemctl disable СЕРВИС",
+        "severity": "high",
+        "requires_root": true,
+        "next": "check_fstab"
+      },
+      "if_no_match": {"next": "check_fstab"}
+    },
+    {
+      "id": "check_fstab",
+      "description": "Проверка /etc/fstab на ошибки",
+      "check": "findmnt --verify 2>&1",
+      "parse": "unknown|error|not found|can't find",
+      "if_match": {
+        "diagnosis": "Ошибка в /etc/fstab — некорректная точка монтирования или UUID",
+        "solution": "Загрузитесь с Live USB, смонтируйте корень и исправьте /etc/fstab. Проверьте UUID: blkid",
+        "explanation": "Если в fstab указан несуществующий UUID или раздел — система зависнет при загрузке.",
+        "severity": "critical",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {"next": "check_disk_space"}
+    },
+    {
+      "id": "check_disk_space",
+      "description": "Проверка свободного места на /",
+      "check": "df -h / 2>/dev/null | tail -1 | awk '{print $5}'",
+      "parse": "100%|9[5-9]%",
+      "if_match": {
+        "diagnosis": "Диск почти полон — это может мешать загрузке",
+        "solution": "Очистите: sudo journalctl --vacuum-size=100M && sudo pacman -Scc (или apt clean). Удалите старые ядра.",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {"next": "check_initramfs"}
+    },
+    {
+      "id": "check_initramfs",
+      "description": "Проверка initramfs",
+      "check": "ls -la /boot/initramfs-* /boot/initrd.img-* 2>/dev/null | head -5",
+      "parse": "initramfs|initrd",
+      "if_match": {
+        "diagnosis": "Initramfs на месте. Проблема загрузки может быть в конфигурации GRUB.",
+        "solution": "Пересоберите GRUB: sudo grub-mkconfig -o /boot/grub/grub.cfg. Проверьте: cat /etc/default/grub",
+        "explanation": "Если ядро обновлялось, а GRUB не переконфигурирован — загрузчик может указывать на старое ядро.",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Initramfs отсутствует — система не может загрузиться без него",
+        "solution": "Загрузитесь с Live USB, chroot в систему и: mkinitcpio -P (Arch) или update-initramfs -u (Ubuntu/Debian)",
+        "severity": "critical",
+        "requires_root": true,
+        "next": null
+      }
+    }
+  ]
+}

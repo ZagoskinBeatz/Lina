@@ -1,0 +1,751 @@
+[
+ {
+  "command": "cmd_0_0",
+  "response": "resp_0_0",
+  "timestamp": 1775575796.8774407,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_1",
+  "response": "resp_0_1",
+  "timestamp": 1775575796.877669,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_2",
+  "response": "resp_0_2",
+  "timestamp": 1775575796.8780382,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_3",
+  "response": "resp_0_3",
+  "timestamp": 1775575796.8783808,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_4",
+  "response": "resp_0_4",
+  "timestamp": 1775575796.8787901,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_0",
+  "response": "resp_1_0",
+  "timestamp": 1775575796.8791206,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_0",
+  "response": "resp_2_0",
+  "timestamp": 1775575796.8793201,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_1",
+  "response": "resp_2_1",
+  "timestamp": 1775575796.8795164,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_2",
+  "response": "resp_2_2",
+  "timestamp": 1775575796.8797092,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_3",
+  "response": "resp_2_3",
+  "timestamp": 1775575796.8798954,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_4",
+  "response": "resp_2_4",
+  "timestamp": 1775575796.8800292,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_5",
+  "response": "resp_0_5",
+  "timestamp": 1775575796.880101,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_6",
+  "response": "resp_0_6",
+  "timestamp": 1775575796.8803046,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_7",
+  "response": "resp_0_7",
+  "timestamp": 1775575796.8804462,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_0",
+  "response": "resp_3_0",
+  "timestamp": 1775575796.8805974,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_1",
+  "response": "resp_1_1",
+  "timestamp": 1775575796.8807492,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_2",
+  "response": "resp_1_2",
+  "timestamp": 1775575796.8808467,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_3",
+  "response": "resp_1_3",
+  "timestamp": 1775575796.8810625,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_4",
+  "response": "resp_1_4",
+  "timestamp": 1775575796.8812876,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_5",
+  "response": "resp_2_5",
+  "timestamp": 1775575796.8814807,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_8",
+  "response": "resp_0_8",
+  "timestamp": 1775575796.881665,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_1",
+  "response": "resp_3_1",
+  "timestamp": 1775575796.881833,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_2",
+  "response": "resp_3_2",
+  "timestamp": 1775575796.8819776,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_3",
+  "response": "resp_3_3",
+  "timestamp": 1775575796.8820715,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_4",
+  "response": "resp_3_4",
+  "timestamp": 1775575796.8821366,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_5",
+  "response": "resp_3_5",
+  "timestamp": 1775575796.8824587,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_6",
+  "response": "resp_3_6",
+  "timestamp": 1775575796.882629,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_7",
+  "response": "resp_3_7",
+  "timestamp": 1775575796.8827696,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_5",
+  "response": "resp_1_5",
+  "timestamp": 1775575796.8829713,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_6",
+  "response": "resp_2_6",
+  "timestamp": 1775575796.8831658,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_9",
+  "response": "resp_0_9",
+  "timestamp": 1775575796.883315,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_10",
+  "response": "resp_0_10",
+  "timestamp": 1775575796.8834372,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_11",
+  "response": "resp_0_11",
+  "timestamp": 1775575796.8835216,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_12",
+  "response": "resp_0_12",
+  "timestamp": 1775575796.8836195,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_13",
+  "response": "resp_0_13",
+  "timestamp": 1775575796.8838947,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_14",
+  "response": "resp_0_14",
+  "timestamp": 1775575796.8840394,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_15",
+  "response": "resp_0_15",
+  "timestamp": 1775575796.8842223,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_8",
+  "response": "resp_3_8",
+  "timestamp": 1775575796.8843918,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_6",
+  "response": "resp_1_6",
+  "timestamp": 1775575796.8845677,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_7",
+  "response": "resp_2_7",
+  "timestamp": 1775575796.8847106,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_8",
+  "response": "resp_2_8",
+  "timestamp": 1775575796.8848228,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_9",
+  "response": "resp_2_9",
+  "timestamp": 1775575796.8849287,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_10",
+  "response": "resp_2_10",
+  "timestamp": 1775575796.8850172,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_11",
+  "response": "resp_2_11",
+  "timestamp": 1775575796.885097,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_12",
+  "response": "resp_2_12",
+  "timestamp": 1775575796.8853574,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_13",
+  "response": "resp_2_13",
+  "timestamp": 1775575796.8855135,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_16",
+  "response": "resp_0_16",
+  "timestamp": 1775575796.885648,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_7",
+  "response": "resp_1_7",
+  "timestamp": 1775575796.885762,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_9",
+  "response": "resp_3_9",
+  "timestamp": 1775575796.8859322,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_10",
+  "response": "resp_3_10",
+  "timestamp": 1775575796.8860884,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_11",
+  "response": "resp_3_11",
+  "timestamp": 1775575796.8862636,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_12",
+  "response": "resp_3_12",
+  "timestamp": 1775575796.8864717,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_14",
+  "response": "resp_2_14",
+  "timestamp": 1775575796.8866422,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_17",
+  "response": "resp_0_17",
+  "timestamp": 1775575796.886783,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_8",
+  "response": "resp_1_8",
+  "timestamp": 1775575796.8869221,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_9",
+  "response": "resp_1_9",
+  "timestamp": 1775575796.8870695,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_10",
+  "response": "resp_1_10",
+  "timestamp": 1775575796.8872194,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_11",
+  "response": "resp_1_11",
+  "timestamp": 1775575796.8873568,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_12",
+  "response": "resp_1_12",
+  "timestamp": 1775575796.8874686,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_13",
+  "response": "resp_1_13",
+  "timestamp": 1775575796.8875794,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_14",
+  "response": "resp_1_14",
+  "timestamp": 1775575796.8876777,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_13",
+  "response": "resp_3_13",
+  "timestamp": 1775575796.8878012,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_15",
+  "response": "resp_2_15",
+  "timestamp": 1775575796.8879442,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_18",
+  "response": "resp_0_18",
+  "timestamp": 1775575796.888062,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_0_19",
+  "response": "resp_0_19",
+  "timestamp": 1775575796.888167,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_14",
+  "response": "resp_3_14",
+  "timestamp": 1775575796.888293,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_15",
+  "response": "resp_3_15",
+  "timestamp": 1775575796.8884482,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_16",
+  "response": "resp_3_16",
+  "timestamp": 1775575796.888601,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_17",
+  "response": "resp_3_17",
+  "timestamp": 1775575796.8887053,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_15",
+  "response": "resp_1_15",
+  "timestamp": 1775575796.888845,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_16",
+  "response": "resp_1_16",
+  "timestamp": 1775575796.8889968,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_17",
+  "response": "resp_1_17",
+  "timestamp": 1775575796.8890953,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_18",
+  "response": "resp_1_18",
+  "timestamp": 1775575796.8892896,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_16",
+  "response": "resp_2_16",
+  "timestamp": 1775575796.889442,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_17",
+  "response": "resp_2_17",
+  "timestamp": 1775575796.8895993,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_18",
+  "response": "resp_2_18",
+  "timestamp": 1775575796.8897138,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_2_19",
+  "response": "resp_2_19",
+  "timestamp": 1775575796.8898482,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_18",
+  "response": "resp_3_18",
+  "timestamp": 1775575796.8899913,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_3_19",
+  "response": "resp_3_19",
+  "timestamp": 1775575796.8901,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "cmd_1_19",
+  "response": "resp_1_19",
+  "timestamp": 1775575796.8902109,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Характеристики Behringer BH460",
+  "response": "Яркость 50%",
+  "timestamp": 1775579258.9617748,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Характеристики Behringer BH470",
+  "response": "Яркость 50%",
+  "timestamp": 1775580562.732269,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Найди характеристики Behringer BH470",
+  "response": "🔍 Результаты поиска: «Behringer BH470 характеристики»\n\n  🔗 https://behringer-market.ru › product › 986 ›\n     https://behringer-market.ru/product/986/\n     https://behringer-market.ru › product › 986 › behringer bh 470 BEHRINGER BH 470 совместимы с любыми источниками звука, будь то микшерная консоль или смартфон. Из особенностей звука, предлагаемого BH 470, можно отметить ...\n\n  🔗 studiynye-naushniki-behringer-bh470\n     https://www.pult.ru/product/studiynye-naushniki-behringer-bh470\n     https:",
+  "timestamp": 1775581034.58449,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Найди характеристики Behringer BH470",
+  "response": "К сожалению, не удалось найти информацию в интернете. Попробуйте повторить запрос позже или переформулировать вопрос.",
+  "timestamp": 1775582774.6354947,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Найди характеристики Behringer BH470",
+  "response": "К сожалению, не удалось найти информацию в интернете. Попробуйте повторить запрос позже или переформулировать вопрос.",
+  "timestamp": 1775584769.863842,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Найди характеристики Behringer BH470",
+  "response": "К сожалению, не удалось найти информацию в интернете. Попробуйте повторить запрос позже или переформулировать вопрос.",
+  "timestamp": 1775585319.0661938,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Найди характеристики Behringer BH470",
+  "response": "К сожалению, не удалось найти информацию в интернете. Попробуйте повторить запрос позже или переформулировать вопрос.",
+  "timestamp": 1775585460.5401454,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Характеристики CMF Buds Pro",
+  "response": "К сожалению, не удалось найти информацию в интернете. Попробуйте повторить запрос позже или переформулировать вопрос.",
+  "timestamp": 1775589601.537363,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Характеристики Sony WH-1000XM5",
+  "response": "К сожалению, не удалось найти информацию в интернете. Попробуйте повторить запрос позже или переформулировать вопрос.",
+  "timestamp": 1775635508.4370987,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Сколько весит MacBook Air M3",
+  "response": "Моя система не содержит информации о весе MacBook Air с процессором M3.\n```bash\necho \"Невозможно определить вес MacBook Air с процессором M3 по данным текущей системы.\"\n```",
+  "timestamp": 1775635637.3300164,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Характеристики Sony WH-1000XM5",
+  "response": "🔍 Результаты поиска: «Характеристики Sony WH-1000XM5»\n\n  🔗 specifications\n     https://www.sony-mea.com/ru/electronics/nakladnye-naushniki/wh-1000xm5/specifications\n     https://www.sony-mea.com › ru › electronics › nakladnye-naushniki › wh-1000xm5 › specifications Технические Характеристики WH-1000XM5 - Sony MEA Характеристики · Передовое шумоподавление · Технология регистрации шума с многочисленными датчиками · Шумоподавление, не имеющее аналогов · Специально ...\n\n  🔗 https://sonycenter.uz › p",
+  "timestamp": 1775636195.341461,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Характеристики Sony WH-1000XM5",
+  "response": "🔍 Результаты поиска: «Характеристики Sony WH-1000XM5»\n\n  🔗 specifications\n     https://www.sony-mea.com/ru/electronics/nakladnye-naushniki/wh-1000xm5/specifications\n     https://www.sony-mea.com › ru › electronics › nakladnye-naushniki › wh-1000xm5 › specifications Технические Характеристики WH-1000XM5 - Sony MEA Характеристики · Передовое шумоподавление · Технология регистрации шума с многочисленными датчиками · Шумоподавление, не имеющее аналогов · Специально ...\n\n  🔗 https://sonycenter.uz › p",
+  "timestamp": 1775637110.9394433,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Сколько весит MacBook Air M3",
+  "response": "🔍 Результаты поиска: «Сколько весит MacBook Air M3»\n\n  🔗 Apple-MacBook-Air-MRXN3PA-A-Space-Gray-M3-8-256SSD-WiFi-BT-MacOS-136-Retina-124-kg_810915.html\n     https://e-burg.nix.ru/autocatalog/apple_notebook/Apple-MacBook-Air-MRXN3PA-A-Space-Gray-M3-8-256SSD-WiFi-BT-MacOS-136-Retina-124-kg_810915.html\n     https://e-burg.nix.ru › autocatalog › apple_notebook › Apple-MacBook-Air-MRXN3PA-A-Space-Gray-M3-8-256SSD-WiFi-BT-MacOS-136-Retina-124-kg_810915.html Ноутбук Apple MacBook Air 13 M3 (2024 года) ",
+  "timestamp": 1775637122.1660273,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Характеристики Sony WH-1000XM5",
+  "response": "🔍 Результаты поиска: «Характеристики Sony WH-1000XM5»\n\n  🔗 specifications\n     https://www.sony.es/electronics/diadema/wh-1000xm5/specifications\n     https://www.sony.es › electronics › diadema › wh-1000xm5 › specifications Especificaciones de WH-1000XM5 | Auriculares de diadema Descubre las especificaciones del producto WH-1000XM5 de Sony y encuentra Auriculares de diadema ideales para tus necesidades.\n\n  🔗 specifications\n     https://www.sony.es/electronics/support/wireless-headphones-bluetoot",
+  "timestamp": 1775637452.0191896,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Сколько весит MacBook Air M3",
+  "response": "🔍 Результаты поиска: «Сколько весит MacBook Air M3»\n\n  🔗 https://www.reddit.com › r › mac › comments › 1eqdz2g › 11_macbook_air_vs_13_macbook_air_m2_m3_size › ?tl=ru\n     https://www.reddit.com/r/mac/comments/1eqdz2g/11_macbook_air_vs_13_macbook_air_m2_m3_size/?tl=ru\n     Reddit https://www.reddit.com › r › mac › comments › 1eqdz2g › 11_macbook_air_vs_13_macbook_air_m2_m3_size › ?tl=ru Сравнение размеров 11-дюймового MacBook Air и 13 ... 12 ago 2024 ... Сколько весит M2 Air (2022) вместе с короб",
+  "timestamp": 1775637463.1629162,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Привет",
+  "response": "Привет! Чем помочь?",
+  "timestamp": 1775707603.6892154,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Найди характеристики AMD Ryzen 7 5825U",
+  "response": "🔍 Результаты поиска: «Найди характеристики AMD Ryzen 7 5825U»\n\n  🔗 AMD-R7-5825U.846691.0.html\n     www.notebookcheck-ru.com\n     https://www.notebookcheck-ru.com › AMD-R7-5825U.846691.0.html AMD Ryzen 7 5825U - Notebookcheck-ru.com hace 5 días ... AMD Ryzen 7 5825U ; Макс. температура, 95 °C ; Разъём (сокет), FP6 ; Особенности, DDR4-3200/LPDDR4x-4266 RAM (incl. ECC), PCIe 3, MMX, SSE, SSE2, ...\n\n  🔗 amd-ryzen-7-5825u\n     nanoreview.net\n     https://nanoreview.net › ru › cpu › amd-ryzen-7-5825u ",
+  "timestamp": 1775707703.6352363,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Привет",
+  "response": "Привет, zbeatz! Чем могу помочь?",
+  "timestamp": 1775713085.9586294,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Какая диагональ монитора?",
+  "response": "=== OS ===\nNAME=\"CachyOS Linux\"\nPRETTY_NAME=\"CachyOS\"\nID=cachyos\n=== Kernel ===\n6.19.10-1-cachyos\n=== CPU ===\nmodel name\t: AMD Ryzen 7 5825U with Radeon Graphics\n=== RAM ===\n               total        used        free      shared  buff/cache   available\nMem:            15Gi       4,6Gi       4,5Gi        61Mi       6,3Gi        10Gi\n=== Disk ===\n/dev/nvme0n1p5     277G         155G  119G           57% /",
+  "timestamp": 1775713146.9968073,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Какая диагональ у Samsung Galaxy S24 Ultra",
+  "response": "=== COMMAND ===\n#!/bin/bash\necho \"Я не могу сказать диагональ Samsung Galaxy S24 Ultra, потому что я Lina, локальный IAI-ассистент для Linux на CachyOS и работаю только с вашей системой. Вам нужен сайт специализированный на справочную информацию о мобильных устройствах Samsung.\"",
+  "timestamp": 1775713293.5346718,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Привет",
+  "response": "<think>\n\n</think>\n\nПривет! Чем могу помочь с твоей системой?",
+  "timestamp": 1776667096.1993654,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Здорова",
+  "response": "Привет! Чем могу помочь?",
+  "timestamp": 1776667262.0466456,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Здорова",
+  "response": "<think>\n\n</think>\n\nПривет! Чем могу помочь с твоей системой? Напиши, что нужно сделать или проверь.",
+  "timestamp": 1776667394.457703,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "найди отличие DDR4 от DDR5",
+  "response": "🔍 Результаты поиска: «найди отличие DDR4 от DDR5»\n\n  🔗 ddr4-ili-ddr5-v-chem-raznicza-i-stoit-li-obnovlyatsya\n     www.mvideo.ru\n     https://www.mvideo.ru › blog › pomogaem-razobratsya › ddr4-ili-ddr5-v-chem-raznicza-i-stoit-li-obnovlyatsya DDR4 или DDR5: в чем разница и стоит ли обновляться 27 mar 2024 ... Рассказываем об основных отличиях DDR5 от DDR4. Сравниваем технические характеристики и публикуем результаты тестов: игровые\n\n  🔗 https://habr.com › ru › companies › x-com › articles › 927856",
+  "timestamp": 1776667529.0912216,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Продолжи",
+  "response": "<think>\n\n</think>\n\nПродолжи.",
+  "timestamp": 1776667644.0184796,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Mini model",
+  "response": "Привет! Чем могу помочь с твоей системой?",
+  "timestamp": 1776667738.7961087,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Какая у меня система",
+  "response": "Вы используете **CachyOS** с ядром 6.19.12-1-cachyos, графическим окружением GNOME и Wayland.\n\n```bash\nuname -r && echo \"DE: $(gsettings get org.gnome.desktop.interface desktop-name)\"\n```",
+  "timestamp": 1776667805.0881174,
+  "success": true,
+  "category": "general"
+ }
+]

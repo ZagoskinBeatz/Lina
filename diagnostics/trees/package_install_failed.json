@@ -1,0 +1,78 @@
+{
+  "id": "package_install_failed",
+  "name": "Ошибка установки пакета",
+  "triggers": ["не устанавливается пакет", "ошибка pacman", "apt ошибка", "dnf error", "зависимости не разрешены", "broken packages", "конфликт пакетов"],
+  "description": "Диагностика проблем с установкой пакетов",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "which pacman 2>/dev/null && echo 'PACMAN' || which apt 2>/dev/null && echo 'APT' || which dnf 2>/dev/null && echo 'DNF'",
+      "parse": "PACMAN|APT|DNF",
+      "if_match": {
+        "diagnosis": "Определён пакетный менеджер",
+        "next": "step_2"
+      },
+      "if_no_match": {
+        "diagnosis": "Не удалось определить пакетный менеджер",
+        "next": null
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "which pacman >/dev/null 2>&1 && pacman -Sy --noconfirm 2>&1 | tail -3 || apt update 2>&1 | tail -3 || dnf check-update 2>&1 | tail -3",
+      "parse": "error|ошибк|E:|Err",
+      "requires_root": true,
+      "if_match": {
+        "diagnosis": "Ошибка при обновлении базы данных пакетов",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "База данных пакетов обновлена успешно",
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "ping -c1 -W2 archlinux.org 2>/dev/null || ping -c1 -W2 ubuntu.com 2>/dev/null || ping -c1 -W2 fedoraproject.org 2>/dev/null",
+      "parse": "1 received",
+      "if_match": {
+        "diagnosis": "Интернет работает. Проблема может быть в зеркалах.",
+        "solution": "Обновите зеркала. Arch: sudo reflector --latest 20 --sort rate --save /etc/pacman.d/mirrorlist. Ubuntu: sudo apt update --fix-missing.",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "diagnosis": "Нет интернета! Сначала восстановите подключение.",
+        "next": null
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "which pacman >/dev/null 2>&1 && pacman -Dk 2>&1 | tail -5 || dpkg --audit 2>&1 | tail -5",
+      "parse": "missing|broken|неудовлетвор",
+      "if_match": {
+        "diagnosis": "Обнаружены битые зависимости!",
+        "solution": "Arch: sudo pacman -Syu (полное обновление). Debian/Ubuntu: sudo apt --fix-broken install. Fedora: sudo dnf distro-sync.",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Зависимости в порядке.",
+        "next": "step_5"
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "df -h / | tail -1 | awk '{print $5}' | tr -d '%'",
+      "parse": "^(9[0-9]|100)$",
+      "if_match": {
+        "diagnosis": "Диск заполнен на 90%+! Недостаточно места для установки.",
+        "solution": "Освободите место: очистите кэш пакетов (sudo pacman -Sc или sudo apt clean), удалите ненужные пакеты.",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Места на диске достаточно. Попробуйте принудительную переустановку или очистку кэша пакетного менеджера.",
+        "solution": "Arch: sudo pacman -Scc && sudo pacman -Syu. Debian: sudo apt clean && sudo apt update.",
+        "next": null
+      }
+    }
+  ]
+}

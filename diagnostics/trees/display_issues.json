@@ -1,0 +1,78 @@
+{
+  "id": "display_issues",
+  "name": "Проблемы с экраном / дисплеем",
+  "triggers": ["экран не работает", "чёрный экран", "не видит монитор", "нет изображения", "blank screen", "черный экран после загрузки"],
+  "description": "Диагностика проблем отображения: чёрный экран, отсутствие вывода",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "xrandr --current 2>/dev/null || wlr-randr 2>/dev/null",
+      "parse": "connected",
+      "if_match": {
+        "diagnosis": "Мониторы подключены и видны системой",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "Система не видит подключённые мониторы",
+        "next": "step_2"
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "lspci -k | grep -A3 'VGA\\|3D'",
+      "parse": "Kernel driver in use",
+      "if_match": {
+        "diagnosis": "GPU-драйвер загружен, проблема может быть в кабеле или мониторе",
+        "solution": "Проверьте кабель (HDMI/DP), попробуйте другой порт",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "GPU-драйвер НЕ загружен",
+        "solution": "Установите драйвер GPU. Для NVIDIA: sudo pacman -S nvidia. Для AMD: mesa уже включён.",
+        "next": null
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "xrandr --current 2>/dev/null | grep ' connected' | wc -l",
+      "parse": "^[2-9]",
+      "if_match": {
+        "diagnosis": "Подключено несколько мониторов",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "diagnosis": "Подключён один монитор",
+        "next": "step_5"
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "xrandr --current 2>/dev/null | grep ' connected'",
+      "parse": "\\+",
+      "if_match": {
+        "diagnosis": "Мониторы настроены, изображение должно быть",
+        "next": "step_5"
+      },
+      "if_no_match": {
+        "diagnosis": "Мультимонитор: возможно, вывод направлен не на тот экран",
+        "solution": "Попробуйте: xrandr --output <выход> --auto",
+        "next": null
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "journalctl -b -p err --no-pager 2>/dev/null | grep -i 'drm\\|gpu\\|display\\|framebuffer' | tail -5",
+      "parse": "error|fail|fault",
+      "if_match": {
+        "diagnosis": "Обнаружены ошибки GPU/DRM в логах ядра",
+        "solution": "Проверьте драйвер GPU и обновите ядро. Возможно, нужен параметр ядра nomodeset.",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Ошибок GPU в логах не обнаружено. Проверьте настройки композитора.",
+        "suggestion": "Попробуйте переключиться между Wayland и X11.",
+        "next": null
+      }
+    }
+  ]
+}

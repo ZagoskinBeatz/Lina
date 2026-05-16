@@ -1,0 +1,79 @@
+{
+  "id": "grub_bootloader",
+  "name": "Проблемы с GRUB / загрузчиком",
+  "triggers": ["grub не загружается", "grub rescue", "загрузчик сломан", "boot repair", "не грузится grub", "error: unknown filesystem"],
+  "description": "Диагностика проблем с загрузчиком GRUB",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "test -d /sys/firmware/efi && echo 'UEFI' || echo 'BIOS'",
+      "parse": "UEFI",
+      "if_match": {
+        "diagnosis": "Система загружена в режиме UEFI",
+        "next": "step_2"
+      },
+      "if_no_match": {
+        "diagnosis": "Система загружена в режиме Legacy BIOS",
+        "next": "step_3"
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "efibootmgr 2>/dev/null | head -15",
+      "parse": "Boot",
+      "requires_root": true,
+      "if_match": {
+        "diagnosis": "EFI-записи загрузки найдены",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "EFI-записи не найдены или efibootmgr недоступен",
+        "solution": "Установите efibootmgr и восстановите запись: sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB",
+        "next": "step_3"
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "grub-install --version 2>/dev/null || echo 'GRUB not found'",
+      "parse": "\\d+\\.\\d+",
+      "if_match": {
+        "diagnosis": "GRUB установлен",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "diagnosis": "GRUB не установлен!",
+        "solution": "Установите: sudo pacman -S grub (Arch) или sudo apt install grub-efi (Debian/Ubuntu)",
+        "next": null
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "cat /boot/grub/grub.cfg 2>/dev/null | grep menuentry | head -5",
+      "parse": "menuentry",
+      "if_match": {
+        "diagnosis": "grub.cfg существует и содержит записи загрузки",
+        "next": "step_5"
+      },
+      "if_no_match": {
+        "diagnosis": "grub.cfg пуст или отсутствует!",
+        "solution": "Пересоздайте: sudo grub-mkconfig -o /boot/grub/grub.cfg",
+        "next": null
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "cat /etc/default/grub 2>/dev/null | grep GRUB_CMDLINE_LINUX_DEFAULT",
+      "parse": "GRUB_CMDLINE_LINUX_DEFAULT",
+      "if_match": {
+        "diagnosis": "Конфигурация GRUB найдена",
+        "suggestion": "Если нужно добавить параметры ядра, отредактируйте /etc/default/grub, затем: sudo grub-mkconfig -o /boot/grub/grub.cfg. Для восстановления GRUB с live-USB: mount корневой раздел, arch-chroot, grub-install.",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Файл /etc/default/grub не найден или повреждён",
+        "solution": "Переустановите grub и пересоздайте конфигурацию.",
+        "next": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+[Unit]
+Description=Lina — локальный ИИ-помощник для Linux
+Documentation=man:lina(1)
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+Environment=HOME=/home/%i
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+WorkingDirectory=/home/%i
+ExecStart=/usr/bin/lina --daemon --quiet
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+# Безопасность
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/%i/.local/share/lina /home/%i/.cache/lina
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+# Ресурсы
+MemoryMax=8G
+CPUQuota=200%
+
+[Install]
+WantedBy=default.target

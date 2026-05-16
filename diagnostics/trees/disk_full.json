@@ -1,0 +1,66 @@
+{
+  "id": "disk_full",
+  "name": "Диск переполнен",
+  "category": "storage",
+  "triggers": [
+    "диск полон", "нет места", "disk full", "no space left",
+    "места на диске нет", "не хватает места", "диск переполнен"
+  ],
+  "steps": [
+    {
+      "id": "check_root_usage",
+      "description": "Проверка заполненности корневого раздела",
+      "check": "df -h / 2>/dev/null | tail -1",
+      "parse": "\\d+%",
+      "if_match": {
+        "next": "check_large_dirs"
+      },
+      "if_no_match": {
+        "diagnosis": "Не удалось определить заполненность диска",
+        "severity": "info",
+        "next": null
+      }
+    },
+    {
+      "id": "check_large_dirs",
+      "description": "Поиск крупных директорий",
+      "check": "du -sh /var/log /var/cache /tmp /home 2>/dev/null | sort -rh | head -5",
+      "parse": "[0-9]",
+      "if_match": {
+        "next": "check_journal_size"
+      },
+      "if_no_match": {"next": "check_journal_size"}
+    },
+    {
+      "id": "check_journal_size",
+      "description": "Размер systemd-журнала",
+      "check": "journalctl --disk-usage 2>/dev/null",
+      "parse": "[0-9]",
+      "if_match": {
+        "next": "check_package_cache"
+      },
+      "if_no_match": {"next": "check_package_cache"}
+    },
+    {
+      "id": "check_package_cache",
+      "description": "Размер кэша пакетного менеджера",
+      "check": "du -sh /var/cache/pacman/pkg 2>/dev/null || du -sh /var/cache/apt 2>/dev/null || du -sh /var/cache/dnf 2>/dev/null",
+      "parse": "[0-9]",
+      "if_match": {
+        "diagnosis": "Диск переполнен. Основные пожиратели: кэш пакетов, журнал systemd, /var/log.",
+        "solution": "1) sudo journalctl --vacuum-size=100M\n2) Кэш пакетов: sudo pacman -Scc / sudo apt clean / sudo dnf clean all\n3) Большие файлы: sudo find / -xdev -size +100M -exec ls -lh {} \\;\n4) Старые ядра: sudo pacman -R $(pacman -Qdtq)",
+        "explanation": "Со временем кэши и логи накапливаются. Регулярная очистка предотвращает переполнение.",
+        "severity": "high",
+        "requires_root": true,
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Проверьте вручную крупные файлы: ncdu / (интерактивный анализатор)",
+        "solution": "Установите ncdu: sudo pacman -S ncdu && sudo ncdu /",
+        "severity": "medium",
+        "requires_root": true,
+        "next": null
+      }
+    }
+  ]
+}

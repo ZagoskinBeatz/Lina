@@ -1,0 +1,38 @@
+name: system_cleanup
+description: "Очистка системы: кэш пакетов, журналы, временные файлы"
+trigger: null
+variables:
+  journal_max_age: "7d"
+  keep_pkg_cache: 2
+steps:
+  - action: shell
+    params:
+      command: "journalctl --vacuum-time={{ journal_max_age }}"
+      sudo: true
+      description: "Очистка старых журналов systemd"
+
+  - action: shell
+    params:
+      command: "paccache -rk{{ keep_pkg_cache }}"
+      sudo: true
+      description: "Удаление старых версий кэша пакетов"
+      condition: "which paccache"
+
+  - action: shell
+    params:
+      command: "apt-get autoremove -y && apt-get autoclean"
+      sudo: true
+      description: "Удаление ненужных пакетов (apt)"
+      condition: "which apt-get"
+
+  - action: shell
+    params:
+      command: "rm -rf /tmp/lina_* /var/tmp/lina_*"
+      sudo: false
+      description: "Удаление временных файлов Lina"
+
+  - action: notify
+    params:
+      title: "Очистка завершена"
+      body: "Система очищена: журналы, кэш, временные файлы"
+      urgency: low

@@ -1,0 +1,75 @@
+{
+  "id": "high_ram_usage",
+  "name": "Высокое потребление RAM",
+  "triggers": ["мало памяти", "оперативка забита", "ram usage", "не хватает памяти", "oom", "out of memory", "swap забит"],
+  "description": "Диагностика проблем с оперативной памятью",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "free -h",
+      "parse": ".*",
+      "if_match": {
+        "diagnosis": "Информация о памяти получена",
+        "next": "step_2"
+      },
+      "if_no_match": {
+        "next": "step_2"
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "free -m | awk '/Mem:/ {printf \"%.0f\", $3/$2*100}'",
+      "parse": "^(9[0-9]|100)$",
+      "if_match": {
+        "diagnosis": "RAM загружена на 90%+. Критическое состояние.",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "Использование RAM в допустимых пределах.",
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "ps aux --sort=-%mem | head -6",
+      "parse": ".*",
+      "if_match": {
+        "diagnosis": "Определены процессы с наибольшим потреблением RAM",
+        "solution": "Завершите ненужные процессы или увеличьте swap.",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "swapon --show 2>/dev/null",
+      "parse": "/",
+      "if_match": {
+        "diagnosis": "Swap активен",
+        "next": "step_5"
+      },
+      "if_no_match": {
+        "diagnosis": "Swap НЕ настроен! При нехватке RAM система может зависнуть (OOM).",
+        "solution": "Создайте swap-файл: sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile",
+        "next": "step_5"
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "dmesg | grep -i 'oom\\|out of memory' | tail -3",
+      "parse": "oom|out of memory",
+      "if_match": {
+        "diagnosis": "В логах ядра обнаружены события OOM Killer. Система убивала процессы из-за нехватки памяти.",
+        "solution": "Увеличьте RAM или swap. Проверьте утечки памяти в приложениях.",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "OOM-событий не обнаружено.",
+        "suggestion": "Следите за потреблением через: watch free -h",
+        "next": null
+      }
+    }
+  ]
+}

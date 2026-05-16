@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.lina.Lina</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Lina</name>
+  <name xml:lang="ru">Lina</name>
+  <summary>Local AI assistant for Linux</summary>
+  <summary xml:lang="ru">Локальный ИИ-помощник для Linux</summary>
+
+  <description>
+    <p>
+      Lina is a fully offline AI assistant for Linux that runs local LLM models (3B–13B).
+      It provides system diagnostics, package management guidance, voice interaction (STT/TTS),
+      a graphical chat interface, and a knowledge base — all without internet access.
+    </p>
+    <p xml:lang="ru">
+      Lina — полностью оффлайн ИИ-помощник для Linux, использующий локальные LLM-модели (3B–13B).
+      Обеспечивает диагностику системы, помощь с управлением пакетами, голосовой ввод/вывод (STT/TTS),
+      графический чат-интерфейс и базу знаний — без доступа к интернету.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">org.lina.Lina.desktop</launchable>
+
+  <url type="homepage">https://github.com/zbeatz/lina</url>
+  <url type="bugtracker">https://github.com/zbeatz/lina/issues</url>
+
+  <provides>
+    <binary>lina</binary>
+  </provides>
+
+  <categories>
+    <category>Utility</category>
+    <category>System</category>
+  </categories>
+
+  <keywords>
+    <keyword>AI</keyword>
+    <keyword>assistant</keyword>
+    <keyword>LLM</keyword>
+    <keyword>offline</keyword>
+    <keyword>diagnostics</keyword>
+    <keyword xml:lang="ru">ИИ</keyword>
+    <keyword xml:lang="ru">помощник</keyword>
+    <keyword xml:lang="ru">диагностика</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.9.5" date="2026-03-05">
+      <description>
+        <p>Packaging infrastructure: CLI --daemon, Flatpak, systemd services, packaging generators.</p>
+      </description>
+    </release>
+    <release version="0.9.0" date="2026-03-05">
+      <description>
+        <p>Voice pipeline: STT/TTS backends, AudioRecorder, VoicePipeline state machine, GUI wiring.</p>
+      </description>
+    </release>
+  </releases>
+</component>

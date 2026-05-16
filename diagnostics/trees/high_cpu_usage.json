@@ -1,0 +1,74 @@
+{
+  "id": "high_cpu_usage",
+  "name": "Высокая нагрузка на CPU",
+  "triggers": ["процессор загружен", "высокий cpu", "тормозит", "лагает", "cpu 100%", "нагрузка на процессор"],
+  "description": "Диагностика высокой загрузки CPU",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "cat /proc/loadavg",
+      "parse": ".*",
+      "if_match": {
+        "diagnosis": "Получена информация о load average",
+        "next": "step_2"
+      },
+      "if_no_match": {
+        "diagnosis": "Не удалось получить load average",
+        "next": "step_2"
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "ps aux --sort=-%cpu | head -6",
+      "parse": ".*",
+      "if_match": {
+        "diagnosis": "Список процессов с наибольшей нагрузкой",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "next": "step_3"
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "nproc",
+      "parse": "^[0-9]+$",
+      "if_match": {
+        "diagnosis": "Количество ядер определено",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo 'unknown'",
+      "parse": "performance",
+      "if_match": {
+        "diagnosis": "CPU governor: performance (максимальная частота). Это нормально для десктопа.",
+        "next": "step_5"
+      },
+      "if_no_match": {
+        "diagnosis": "CPU governor не в режиме performance",
+        "suggestion": "Для максимальной производительности: sudo cpupower frequency-set -g performance",
+        "next": "step_5"
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0",
+      "parse": "[89][0-9]{4}|[1-9][0-9]{5}",
+      "if_match": {
+        "diagnosis": "CPU перегревается! Температура выше 80°C. Возможен thermal throttling.",
+        "solution": "Проверьте систему охлаждения. Очистите вентиляторы. Проверьте термопасту.",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Температура CPU в норме. Проблема скорее программная.",
+        "solution": "Проверьте топ процессов командой: htop. Завершите ненужные процессы.",
+        "next": null
+      }
+    }
+  ]
+}

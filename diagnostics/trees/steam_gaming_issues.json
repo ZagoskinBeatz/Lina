@@ -1,0 +1,79 @@
+{
+  "id": "steam_gaming_issues",
+  "name": "Проблемы с играми / Steam / Proton",
+  "triggers": ["не запускается игра", "steam не работает", "proton ошибка", "gaming issues", "game crash", "fps низкий", "vulkan error"],
+  "description": "Диагностика проблем с играми на Linux (Steam, Proton, Vulkan)",
+  "steps": [
+    {
+      "id": "step_1",
+      "check": "vulkaninfo --summary 2>/dev/null | head -10 || echo 'vulkaninfo not found'",
+      "parse": "Vulkan Instance Version|apiVersion",
+      "if_match": {
+        "diagnosis": "Vulkan доступен",
+        "next": "step_2"
+      },
+      "if_no_match": {
+        "diagnosis": "Vulkan НЕ установлен или не работает! Большинство игр требуют Vulkan.",
+        "solution": "Установите Vulkan: Arch: sudo pacman -S vulkan-icd-loader lib32-vulkan-icd-loader. Для NVIDIA: vulkan-nvidia. Для AMD: vulkan-radeon.",
+        "next": "step_2"
+      }
+    },
+    {
+      "id": "step_2",
+      "check": "which steam 2>/dev/null && dpkg -l steam 2>/dev/null || pacman -Q steam 2>/dev/null || flatpak list 2>/dev/null | grep -i steam",
+      "parse": "steam",
+      "if_match": {
+        "diagnosis": "Steam установлен",
+        "next": "step_3"
+      },
+      "if_no_match": {
+        "diagnosis": "Steam не найден",
+        "solution": "Установите Steam: Arch: sudo pacman -S steam (включите multilib в pacman.conf). Ubuntu: sudo apt install steam. Или через Flatpak.",
+        "next": "step_3"
+      }
+    },
+    {
+      "id": "step_3",
+      "check": "ls ~/.local/share/Steam/compatibilitytools.d/ 2>/dev/null; ls ~/.steam/steam/compatibilitytools.d/ 2>/dev/null",
+      "parse": "GE-Proton|proton",
+      "if_match": {
+        "diagnosis": "Установлена кастомная версия Proton (GE-Proton). Хорошо для совместимости.",
+        "next": "step_4"
+      },
+      "if_no_match": {
+        "diagnosis": "Кастомный Proton не установлен. Рекомендуется GE-Proton для лучшей совместимости.",
+        "suggestion": "Установите ProtonUp-Qt: flatpak install flathub net.davidotek.pupgui2. Или скачайте GE-Proton с github.com/GloriousEggroll/proton-ge-custom",
+        "next": "step_4"
+      }
+    },
+    {
+      "id": "step_4",
+      "check": "pacman -Q lib32-mesa lib32-vulkan-radeon lib32-vulkan-intel 2>/dev/null || dpkg -l libgl1-mesa-dri:i386 2>/dev/null || echo 'check 32-bit libs manually'",
+      "parse": "lib32|i386",
+      "if_match": {
+        "diagnosis": "32-битные библиотеки установлены (необходимы для многих игр)",
+        "next": "step_5"
+      },
+      "if_no_match": {
+        "diagnosis": "32-битные библиотеки не найдены. Многие игры требуют 32-битную поддержку!",
+        "solution": "Arch: включите [multilib] в /etc/pacman.conf, затем: sudo pacman -S lib32-mesa lib32-vulkan-radeon. Ubuntu: sudo dpkg --add-architecture i386 && sudo apt update.",
+        "next": "step_5"
+      }
+    },
+    {
+      "id": "step_5",
+      "check": "glxinfo 2>/dev/null | grep 'direct rendering' || echo 'glxinfo not available'",
+      "parse": "Yes",
+      "if_match": {
+        "diagnosis": "Аппаратное ускорение работает (direct rendering: Yes)",
+        "suggestion": "Если игра всё равно не запускается, попробуйте: PROTON_LOG=1 steam для логов. Или запустите через Gamescope: gamescope -- steam.",
+        "next": null
+      },
+      "if_no_match": {
+        "diagnosis": "Аппаратное ускорение НЕ работает! Игры будут лагать.",
+        "solution": "Установите правильный GPU-драйвер. Для проверки: glxgears (должно показать ~вертикальную синхронизацию).",
+        "next": null
+      }
+    }
+  ]
+}

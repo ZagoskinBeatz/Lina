@@ -1,0 +1,157 @@
+.\" Lina man page
+.TH LINA 1 "March 2026" "Lina 1.0.0" "User Commands"
+.SH NAME
+lina \- локальный ИИ-помощник для Linux
+.SH SYNOPSIS
+.B lina
+[\fIОПЦИИ\fR] [\fIЗАПРОС\fR]
+.SH DESCRIPTION
+.B Lina
+\- это локальный ИИ-помощник для Linux, работающий полностью оффлайн.
+Использует LLM-модели (3B\(en13B) для ответов на вопросы, диагностики проблем
+и управления системой.
+.PP
+Поддерживает CLI, графический интерфейс (PyQt6), голосовое управление (STT/TTS)
+и веб-интерфейс.
+.SH OPTIONS
+.TP
+.B \-\-daemon
+Запуск в фоновом режиме как systemd-сервис.
+.TP
+.B \-\-gui
+Запуск в графическом режиме (system tray + окно чата).
+.TP
+.B \-\-first\-run
+Запуск мастера первого запуска.
+.TP
+.BR \-\-oneshot " " \fIЗАПРОС\fR
+Выполнить один запрос и выйти.
+.TP
+.B \-\-verbose, \-v
+Подробный вывод для отладки (уровень DEBUG).
+.TP
+.B \-\-quiet, \-q
+Тихий режим (без баннера, минимум вывода).
+.TP
+.B \-\-index
+Переиндексировать базу знаний при запуске.
+.TP
+.BR \-\-model " " \fIПУТЬ\fR
+Путь к GGUF-модели.
+.TP
+.B \-\-web
+Запуск веб-интерфейса (FastAPI).
+.TP
+.BR \-\-port " " \fIПОРТ\fR
+Порт для веб-интерфейса (по умолчанию: 8585).
+.TP
+.B \-\-cv
+Включить Computer Vision pipeline.
+.TP
+.B \-\-update
+Проверить и установить обновления.
+.TP
+.B \-\-update\-knowledge
+Обновить базу знаний.
+.TP
+.BR \-\-diagnose " " \fIТЕМА\fR
+Запустить диагностику (wifi, boot, sound, и т.д.).
+.TP
+.B \-\-version
+Показать версию и выйти.
+.TP
+.B \-\-help
+Показать справку и выйти.
+.SH MODES
+.TP
+.B Interactive REPL (по умолчанию)
+Интерактивная сессия с историей команд.
+Специальные команды: /помощь, /статус, /история, /выход.
+.TP
+.B Oneshot
+Единичный запрос:
+.BR "lina \-\-oneshot 'покажи использование диска'"
+.TP
+.B Daemon
+Фоновый режим для systemd-сервиса (SIGTERM для остановки).
+.TP
+.B GUI
+Графический интерфейс с чатом, треем и настройками.
+.SH EXAMPLES
+.TP
+Интерактивный режим:
+.B lina
+.TP
+Одноразовый запрос:
+.B lina \-\-oneshot "Как обновить систему?"
+.TP
+Диагностика Wi-Fi:
+.B lina \-\-diagnose wifi
+.TP
+Фоновый режим:
+.B lina \-\-daemon
+.TP
+Веб-интерфейс:
+.B lina \-\-web \-\-port 9000
+.TP
+Первоначальная настройка:
+.B lina \-\-first\-run
+.SH FILES
+.TP
+.I ~/.config/lina/config.yaml
+Файл конфигурации.
+.TP
+.I ~/.config/lina/settings.json
+Настройки GUI.
+.TP
+.I ~/.cache/lina/models/
+Директория с LLM-моделями.
+.TP
+.I ~/.cache/lina/knowledge/
+Кэш базы знаний.
+.TP
+.I /usr/share/lina/knowledge/
+Системная база знаний.
+.TP
+.I ~/.local/share/lina/logs/
+Логи работы.
+.SH ENVIRONMENT
+.TP
+.B LINA_CONFIG
+Путь к файлу конфигурации.
+.TP
+.B LINA_DATA
+Путь к директории данных.
+.TP
+.B LINA_MODEL
+Путь к модели по умолчанию.
+.TP
+.B LINA_LOG_LEVEL
+Уровень логирования (DEBUG, INFO, WARNING, ERROR).
+.SH DIAGNOSTICS
+Lina включает встроенную диагностику для типичных Linux-проблем:
+.PP
+wifi, bluetooth, no_sound, boot_failure, disk_full, system_slow,
+gpu_drivers, usb_not_detected, update_broke_system.
+.SH EXIT STATUS
+.TP
+.B 0
+Успешное завершение.
+.TP
+.B 1
+Ошибка выполнения.
+.TP
+.B 2
+Ошибка аргументов командной строки.
+.SH SEE ALSO
+.BR systemctl (1),
+.BR journalctl (1),
+.BR pacman (8),
+.BR apt (8),
+.BR dnf (8)
+.SH BUGS
+Сообщайте об ошибках: https://github.com/zbeatz/lina/issues
+.SH AUTHOR
+zbeatz
+.SH LICENSE
+MIT License
