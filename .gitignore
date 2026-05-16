@@ -1,0 +1,5 @@
+
+# Model files
+models/full/*.gguf
+models/mini/*.gguf
+models/mini_v2/*.gguf
