@@ -343,6 +343,32 @@ class ToolRegistry:
             handler=self._tool_web_search,
         )
 
+        # ─── Найти сайт и открыть в браузере ───
+        # Это «комплекс» из web_search + open_url: модель вызывает один раз,
+        # инструмент находит топ-релевантную ссылку и открывает её в браузере.
+        # Для запросов вроде «открой страницу Steam на Arch Wiki».
+        self.register(
+            name="find_and_open_site",
+            description=(
+                "Найти сайт/страницу через веб-поиск и открыть её в браузере. "
+                "Используй когда пользователь просит «открой страницу X», "
+                "«найди и открой Y», «зайди на сайт Z», и точный URL "
+                "неизвестен."
+            ),
+            parameters={
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Что искать. Например: 'GIMP официальный сайт', "
+                        "'Anthropic Claude Code GitHub releases', "
+                        "'Arch Wiki Steam'."
+                    ),
+                    "required": True,
+                },
+            },
+            handler=self._tool_find_and_open_site,
+        )
+
         # ─── Установка приложений ───
         self.register(
             name="install_app",
@@ -625,9 +651,20 @@ class ToolRegistry:
     def _tool_open_app(self, app_name: str) -> ToolResult:
         """Запуск приложения — универсальный поиск с верификацией.
 
-        Если локальное приложение не найдено, автоматически пробует
-        открыть соответствующий веб-сайт в браузере.
+        Порядок:
+          1. site_map — точные/частичные совпадения известных сайтов
+             (яндекс музыка, ютуб, gmail, …). Это нужно ДО резолвера,
+             иначе для запроса «открой яндекс музыку в браузере»
+             резолвер по слову «браузер» запустит Firefox без URL.
+          2. ApplicationResolver — поиск установленного desktop-приложения.
+          3. site_map с нормализацией падежей (страховка).
         """
+        # ── 1. site_map — приоритет известным сайтам ──────────────
+        site_result = self._try_open_known_site(app_name)
+        if site_result is not None:
+            return site_result
+
+        # ── 2. Локальный desktop-резолвер ─────────────────────────
         try:
             from lina.core.application_resolver import get_resolver
             resolver = get_resolver()
@@ -637,8 +674,68 @@ class ToolRegistry:
         except Exception as e:
             logger.error("ApplicationResolver error: %s", e)
 
-        # ── Fallback: приложение не найдено → открываем сайт ──
+        # ── 3. Final fallback: повторный site_map с нормализацией ─
         return self._open_app_web_fallback(app_name)
+
+    @staticmethod
+    def _normalize_for_site_map(text: str) -> str:
+        """Простая нормализация русских падежей для lookup в _SITE_MAP.
+
+        «яндекс музыку» → «яндекс музык»  (чтобы совпало с «яндекс музыка»
+        через partial-match внутри _open_app_web_fallback).
+
+        Не идеально, но решает основные случаи: -у/-ю/-е/-ой/-и в конце.
+        """
+        text = (text or "").strip().lower()
+        if not text:
+            return ""
+        # Снимаем хвост «в браузере / через хром …»
+        text = re.sub(
+            r"\s+(?:в|через)\s+(?:браузере?|хроме?|firefox|chrome|"
+            r"opera|edge|safari)\.?$",
+            "", text, flags=re.IGNORECASE,
+        ).strip()
+        return text
+
+    def _try_open_known_site(self, app_name: str):
+        """Lookup app_name в _SITE_MAP с учётом склонений и хвоста.
+
+        Возвращает ToolResult если совпало, иначе None — caller продолжит
+        обычным путём (через ApplicationResolver).
+        """
+        key = self._normalize_for_site_map(app_name)
+        if not key:
+            return None
+
+        # 1. Точное совпадение
+        if key in self._SITE_MAP:
+            url = self._SITE_MAP[key]
+            logger.info("open_app site (exact): %s → %s", key, url)
+            return self._tool_open_url(url)
+
+        # 2. Частичное совпадение — нужно чтобы «яндекс музыку» совпало
+        # с «яндекс музыка». Берём только базу слов (3+ символа) и
+        # сравниваем с алиасами по началу.
+        key_words = [w for w in key.split() if len(w) >= 3]
+        for alias, url in self._SITE_MAP.items():
+            alias_words = alias.split()
+            # Все слова алиаса должны быть префиксами слов в key
+            # (или наоборот) — это покрывает падежи.
+            if not alias_words or not key_words:
+                continue
+            ok = True
+            for aw in alias_words:
+                base = aw[:max(3, len(aw) - 2)]  # «музыка» → «музык»
+                if not any(kw.startswith(base) or aw.startswith(kw[:max(3, len(kw) - 2)])
+                           for kw in key_words):
+                    ok = False
+                    break
+            if ok:
+                logger.info("open_app site (fuzzy): %s → %s (alias=%s)",
+                            key, url, alias)
+                return self._tool_open_url(url)
+
+        return None
 
     def _open_app_web_fallback(self, app_name: str) -> ToolResult:
         """Fallback: открываем соответствующий сайт в браузере."""
@@ -1293,6 +1390,82 @@ class ToolRegistry:
                 return ToolResult(success=False, error="Не удалось выполнить поиск в интернете")
         except Exception as e:
             return ToolResult(success=False, error=f"Ошибка веб-поиска: {e}")
+
+    @staticmethod
+    def _tool_find_and_open_site(query: str) -> ToolResult:
+        """Find the most relevant URL via web search and open it in browser.
+
+        Логика:
+          1. Выполнить веб-поиск.
+          2. Из результатов выбрать топ по relevance.
+          3. Отфильтровать «мусорные» площадки (агрегаторы, видео-сниппеты).
+          4. Открыть лучшую ссылку через `open_url` (xdg-open в браузере).
+          5. Вернуть какой URL открыт.
+        """
+        query = query.strip()
+        if not query:
+            return ToolResult(success=False, error="Пустой запрос")
+
+        try:
+            from lina.core.web_search_engine import get_web_search_engine
+            engine = get_web_search_engine()
+            resp = engine.search(query)
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                error=f"Не удалось выполнить поиск: {e}",
+            )
+
+        if not resp.success or not resp.results:
+            return ToolResult(
+                success=False,
+                error=(resp.error or
+                       "Поиск ничего не нашёл — попробуй уточнить запрос."),
+            )
+
+        # Сортируем по relevance (на всякий случай — обычно уже отсортировано).
+        ranked = sorted(
+            resp.results,
+            key=lambda r: getattr(r, "relevance", 0.0),
+            reverse=True,
+        )
+
+        # Лёгкий чёрный список: видео-агрегаторы и нерелевантные домены.
+        # Видео сами по себе валидны, но «открой страницу X» обычно
+        # означает официальный сайт / документацию / GitHub, а не YouTube.
+        _BLACKLIST_DOMAINS = (
+            "google.com/search", "duckduckgo.com", "ecosia.org",
+            "search.brave.com",
+        )
+
+        best = None
+        for r in ranked:
+            url = getattr(r, "url", "") or ""
+            if not url or not url.startswith(("http://", "https://")):
+                continue
+            url_lower = url.lower()
+            if any(d in url_lower for d in _BLACKLIST_DOMAINS):
+                continue
+            best = r
+            break
+
+        if best is None:
+            return ToolResult(
+                success=False,
+                error="В результатах нет подходящих ссылок — попробуй другой запрос.",
+            )
+
+        # Открываем через тот же метод что и обычный open_url —
+        # его блок-лист схем (file://, javascript:, data:) сработает.
+        result = ToolRegistry._tool_open_url(best.url)
+        if not result.success:
+            return result
+
+        title = (getattr(best, "title", "") or "").strip()
+        label = f"«{title}»" if title else best.url
+        return ToolResult(
+            output=f"🌐 Нашла и открываю: {label}\n{best.url}",
+        )
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  Интерактивная консоль

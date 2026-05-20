@@ -246,10 +246,6 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
                         else QtCore.pyqtSignal())
         settings_requested = (QtCore.Signal() if hasattr(QtCore, 'Signal')
                               else QtCore.pyqtSignal())
-        pure_mode_toggled = (QtCore.Signal(bool) if hasattr(QtCore, 'Signal')
-                             else QtCore.pyqtSignal(bool))
-        pure_model_tier_requested = (QtCore.Signal() if hasattr(QtCore, 'Signal')
-                                     else QtCore.pyqtSignal())
 
         def __init__(self, parent=None):
             super().__init__(parent)
@@ -263,8 +259,6 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
             layout = QtWidgets.QHBoxLayout(self)
             layout.setContentsMargins(18, 0, 18, 0)
             layout.setSpacing(12)
-
-            # (avatar removed — title text is enough)
 
             # Title + status
             info_layout = QtWidgets.QVBoxLayout()
@@ -282,28 +276,11 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
             layout.addLayout(info_layout)
             layout.addStretch()
 
-            # Quick pipeline mode toggle
-            self._pure_btn = QtWidgets.QPushButton("PIPE")
-            self._pure_btn.setObjectName("titleBtn")
-            self._pure_btn.setFixedSize(72, 38)
-            self._pure_btn.setCheckable(True)
-            self._pure_btn.setToolTip(
-                "Быстрый режим: PIPE = обычная обработка, PURE = чистая модель"
-            )
-            self._pure_btn.toggled.connect(self.pure_mode_toggled.emit)
-            layout.addWidget(self._pure_btn)
-
-            self._model_btn = QtWidgets.QPushButton("7B")
-            self._model_btn.setObjectName("titleBtn")
-            self._model_btn.setFixedSize(52, 38)
-            self._model_btn.setToolTip("PURE модель: Qwen3.5-0.8B (mini) / Qwen3.5 4B (full)")
-            self._model_btn.clicked.connect(self.pure_model_tier_requested.emit)
-            layout.addWidget(self._model_btn)
-
             # Settings button
             self._settings_btn = QtWidgets.QPushButton("⚙")
             self._settings_btn.setObjectName("titleBtn")
             self._settings_btn.setFixedSize(38, 38)
+            self._settings_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
             self._settings_btn.setToolTip("Настройки")
             self._settings_btn.clicked.connect(self.settings_requested.emit)
             layout.addWidget(self._settings_btn)
@@ -312,6 +289,7 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
             theme_btn = QtWidgets.QPushButton("🌙")
             theme_btn.setObjectName("titleBtn")
             theme_btn.setFixedSize(38, 38)
+            theme_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
             theme_btn.setToolTip("Сменить тему")
             theme_btn.clicked.connect(self.theme_toggle.emit)
             layout.addWidget(theme_btn)
@@ -320,6 +298,7 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
             menu_btn = QtWidgets.QPushButton("⋮")
             menu_btn.setObjectName("titleBtn")
             menu_btn.setFixedSize(38, 38)
+            menu_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
             menu_btn.setToolTip("Меню")
             self._menu_btn = menu_btn
             layout.addWidget(menu_btn)
@@ -328,22 +307,6 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
             self.status_label.setText(f"● {text}")
             self.status_label.setStyleSheet(
                 f"color: {color}; font-size: 11px;")
-
-        def set_pure_mode(self, enabled: bool):
-            self._pure_btn.blockSignals(True)
-            self._pure_btn.setChecked(enabled)
-            self._pure_btn.setText("PURE" if enabled else "PIPE")
-            self._pure_btn.setToolTip(
-                "PURE: чистая модель без RAG/web/tools/pipeline"
-                if enabled else
-                "PIPE: обычный режим с pipeline-обработкой"
-            )
-            self._pure_btn.blockSignals(False)
-
-        def set_pure_model_tier(self, tier: str, label: str):
-            is_mini = str(tier).lower() == "mini"
-            self._model_btn.setText("3B" if is_mini else "7B")
-            self._model_btn.setToolTip(f"PURE модель: {label}")
 
     # ─────────────────────────────────────────────────────────────────────
     # Block C — InputBar (redesigned glass)
@@ -759,10 +722,7 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
     # ─────────────────────────────────────────────────────────────────────
 
     class LinaStatusBar(QtWidgets.QWidget):
-        """Bottom bar with mode tabs (PIPE/PURE) + mic buttons + status."""
-
-        mode_changed = (QtCore.Signal(str) if hasattr(QtCore, 'Signal')
-                        else QtCore.pyqtSignal(str))
+        """Bottom bar with status / info / metrics + mic button."""
 
         def __init__(self, parent=None):
             super().__init__(parent)
@@ -770,24 +730,10 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
                 QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
             self.setFixedHeight(52)
             self.setObjectName("statusBar")
-            self._current_mode = "pipe"
 
             layout = QtWidgets.QHBoxLayout(self)
             layout.setContentsMargins(16, 6, 16, 6)
             layout.setSpacing(8)
-
-            # Mode tabs (like the reference: Быстрый / Профессиональный)
-            self._pipe_tab = QtWidgets.QPushButton("🔄 Pipeline")
-            self._pipe_tab.setObjectName("modeTabActive")
-            self._pipe_tab.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-            self._pipe_tab.clicked.connect(lambda: self._set_mode("pipe"))
-            layout.addWidget(self._pipe_tab)
-
-            self._pure_tab = QtWidgets.QPushButton("✨ Чистая LLM")
-            self._pure_tab.setObjectName("modeTab")
-            self._pure_tab.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-            self._pure_tab.clicked.connect(lambda: self._set_mode("pure"))
-            layout.addWidget(self._pure_tab)
 
             layout.addStretch()
 
@@ -807,23 +753,6 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
             mic1.setFixedSize(38, 38)
             mic1.setToolTip("Голосовой ввод")
             layout.addWidget(mic1)
-
-        def _set_mode(self, mode: str):
-            if mode == self._current_mode:
-                return
-            self._current_mode = mode
-            if mode == "pipe":
-                self._pipe_tab.setObjectName("modeTabActive")
-                self._pure_tab.setObjectName("modeTab")
-            else:
-                self._pipe_tab.setObjectName("modeTab")
-                self._pure_tab.setObjectName("modeTabActive")
-            # Force style refresh
-            self._pipe_tab.style().unpolish(self._pipe_tab)
-            self._pipe_tab.style().polish(self._pipe_tab)
-            self._pure_tab.style().unpolish(self._pure_tab)
-            self._pure_tab.style().polish(self._pure_tab)
-            self.mode_changed.emit(mode)
 
         def set_mode(self, mode: str):
             colors = get_theme(gui_config.theme_name)
@@ -856,8 +785,6 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
     # ─────────────────────────────────────────────────────────────────────
 
     class LinaMainWindow(QtWidgets.QMainWindow):
-        """Main desktop window for Lina AI Assistant with sidebar."""
-
         def __init__(self):
             super().__init__()
             self.controller = controller
@@ -867,17 +794,14 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
             self._workers: list = []
             self._current_worker = None
             self._current_session_id: Optional[str] = None
+            self._repair_attempts = {"count": 0, "last_cmd": ""}
+            self._install_workflow = None  # активный install workflow (если есть)
 
             self._setup_window()
             self._setup_ui()
             self._connect_controller()
             self._apply_theme(gui_config.theme_name)
-            self._sync_runtime_mode_ui()
-
-            # Load or create initial session
             self._init_session()
-
-            logger.info("LinaMainWindow создано")
 
         # ── Window Setup ──
 
@@ -978,8 +902,6 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
             self.title_bar = TitleBar()
             self.title_bar.theme_toggle.connect(self._toggle_theme)
             self.title_bar.settings_requested.connect(self._open_settings_dialog)
-            self.title_bar.pure_mode_toggled.connect(self._on_pure_mode_toggled)
-            self.title_bar.pure_model_tier_requested.connect(self._toggle_pure_model_tier)
             self.title_bar._menu_btn.clicked.connect(self._show_menu_popup)
             right_layout.addWidget(self.title_bar)
 
@@ -1212,7 +1134,6 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
             self.status_bar.set_mode("ready")
             self.title_bar.set_status("В сети", "#3fb950")
             self.chat_view.show_typing(False)
-            self._sync_runtime_mode_ui()
             # Auto-save after each response
             self._persist_current_messages()
 
@@ -1270,12 +1191,24 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
 
         def _on_stream_token(self, token: str):
             """Handle a single streamed token — update placeholder live."""
+            # Если первый «токен» — sentinel install workflow, не показываем
+            # его пользователю. Финал обработает _on_worker_finished.
+            if isinstance(token, str) and token.startswith("[LINA-INSTALL]"):
+                return
             controller.stream_token(token)
 
         def _on_worker_finished(self, response: str):
             try:
                 self._disconnect_stop_signal()
                 pid = getattr(self, '_current_placeholder_id', None)
+
+                # ── Install workflow trigger ────────────────────────
+                if response and response.startswith("[LINA-INSTALL]"):
+                    target = response[len("[LINA-INSTALL]"):].strip()
+                    if pid is not None and target:
+                        self._start_install_workflow(target, pid)
+                        return  # workflow возьмёт управление, finally сработает
+
                 if pid is not None:
                     text = response.strip() if response else ""
                     if not text:
@@ -1319,6 +1252,127 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
 
         # ── Embedded Terminal (install commands) ──
 
+        def _start_install_workflow(self, target: str, placeholder_id) -> None:
+            """Запустить InstallWorkflow для target и привязать его прогресс
+            к placeholder-сообщению (заменяя «⏳ Думаю...»).
+
+            Если предыдущий workflow ещё жив (например, пользователь снова
+            набрал «установи X» пока шла установка) — отменяем его. Это
+            гарантирует:
+              • один активный subscriber на terminal.command_finished,
+              • убийство зависшего PTY-процесса (sudo ждал пароль),
+              • никаких параллельных диалогов подтверждения.
+            """
+            # Cancel any previous workflow before starting a new one.
+            prev_wf = getattr(self, "_install_workflow", None)
+            if prev_wf is not None:
+                logger.info(
+                    "Install workflow: cancelling previous workflow "
+                    "before starting new one for '%s'", target,
+                )
+                try:
+                    prev_wf.cancel()
+                except Exception as e:
+                    logger.debug("Previous workflow cancel failed: %s", e)
+                self._install_workflow = None
+
+            try:
+                from lina.gui.install_workflow import (
+                    InstallWorkflow, InstallResult,
+                )
+            except Exception as e:
+                logger.error("install_workflow import failed: %s", e, exc_info=True)
+                controller.update_message(
+                    placeholder_id,
+                    "⚠ Не удалось загрузить install workflow.",
+                    MessageStatus.ERROR,
+                )
+                return
+
+            self._current_placeholder_id = None
+            controller._current_stream_id = None
+
+            def _on_card(text: str) -> None:
+                # Обновляем сообщение каждый раз когда workflow меняет карточку.
+                try:
+                    controller.update_message(
+                        placeholder_id, text, MessageStatus.PENDING,
+                    )
+                except Exception as e:
+                    logger.debug("install card update failed: %s", e)
+
+            def _on_done(result) -> None:
+                final_status = (
+                    MessageStatus.COMPLETE if result.success
+                    else MessageStatus.ERROR
+                )
+                final_text = (
+                    result.card.render() if result.card else
+                    (f"✅ Установлено: {result.target}" if result.success
+                     else f"❌ Не удалось установить «{result.target}»: "
+                          f"{result.reason}")
+                )
+                try:
+                    controller.update_message(
+                        placeholder_id, final_text, final_status,
+                    )
+                except Exception as e:
+                    logger.debug("install final update failed: %s", e)
+                self._install_workflow = None
+
+            def _on_confirm(title: str, message: str) -> bool:
+                # Спрашиваем пользователя через QMessageBox. Работает только
+                # для удалений/потенциально опасных действий.
+                # Гарантируем что окно поднимется поверх всего.
+                self.raise_()
+                self.activateWindow()
+                box = QtWidgets.QMessageBox(self)
+                box.setIcon(QtWidgets.QMessageBox.Icon.Question)
+                box.setWindowTitle(title)
+                box.setText(message)
+                box.setStandardButtons(
+                    QtWidgets.QMessageBox.StandardButton.Yes
+                    | QtWidgets.QMessageBox.StandardButton.No
+                )
+                box.setDefaultButton(QtWidgets.QMessageBox.StandardButton.No)
+                box.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+                logger.info("Install workflow: showing confirm dialog '%s'", title)
+                reply = box.exec()
+                logger.info("Install workflow: confirm reply=%s", reply)
+                return reply == QtWidgets.QMessageBox.StandardButton.Yes
+
+            def _on_password(reason: str):
+                """Спросить sudo-пароль модальным диалогом.
+
+                Возвращает строку с паролем или None если пользователь
+                отменил/закрыл окно. Пароль не логируется и не хранится
+                нигде кроме памяти workflow.
+                """
+                self.raise_()
+                self.activateWindow()
+                pw, ok = QtWidgets.QInputDialog.getText(
+                    self,
+                    "Требуется пароль sudo",
+                    reason + "\n\nВведите пароль для пользователя:",
+                    QtWidgets.QLineEdit.EchoMode.Password,
+                )
+                logger.info("Install workflow: sudo password dialog ok=%s", ok)
+                if not ok or not pw:
+                    return None
+                return pw
+
+            wf = InstallWorkflow(
+                target=target,
+                terminal=self.terminal,
+                on_card_update=_on_card,
+                on_done=_on_done,
+                on_confirm_request=_on_confirm,
+                on_password_request=_on_password,
+            )
+            self._install_workflow = wf  # держим ссылку чтобы не GC'нулась
+            logger.info("Install workflow started for '%s'", target)
+            wf.start()
+
         def _check_for_executable_commands(self, text: str):
             """Detect executable commands in bot response and show action bar."""
             try:
@@ -1344,6 +1398,26 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
         def _on_execute_command(self, command: str):
             """User confirmed — run command in embedded terminal."""
             try:
+                # Блокируем опасные команды (`curl ... | sh`, `rm -rf /`,
+                # форк-бомбы, dd if=, и т.п.). Делаем проверку через тот же
+                # детектор что и в CLI-pipeline (`extract_commands`), чтобы
+                # GUI и CLI имели одинаковую модель безопасности.
+                from lina.core.system_interaction import _DANGEROUS_RE
+                if _DANGEROUS_RE.search(command):
+                    logger.warning("GUI: blocked dangerous command: %s", command)
+                    self.command_bar.hide()
+                    controller.add_message(
+                        MessageRole.SYSTEM,
+                        "⛔ Команда заблокирована как опасная: "
+                        f"`{command}`\n"
+                        "Чаще всего это «скачать-и-выполнить» (`curl … | sh`) "
+                        "или необратимое удаление. Сейчас попрошу Lina "
+                        "предложить безопасный способ.",
+                    )
+                    # Сразу запускаем repair-flow — так пользователь не
+                    # остаётся с заблокированной командой и без альтернативы.
+                    self._auto_repair_after_block(command)
+                    return
                 self.command_bar.hide()
                 self.terminal.run_command(command)
                 self.status_bar.set_mode("executing")
@@ -1354,26 +1428,286 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
                     MessageRole.SYSTEM,
                     f"❌ Ошибка запуска: {e}")
 
-        def _on_terminal_finished(self, exit_code: int, command: str):
-            """Terminal command completed."""
+        def _on_terminal_finished(self, exit_code: int, command: str, output: str = ""):
+            """Terminal command completed.
+
+            On success — quietly mark the command as done.
+            On error — automatically ask the LLM for a fix attempt
+            using the captured stderr/stdout, so the user does not
+            have to debug it themselves.
+            """
+            # Если активен install_workflow — он сам обрабатывает сигнал
+            # терминала и всю диагностику. Стандартный auto-repair в это
+            # время МОЛЧИТ, иначе оба механизма одновременно лезут с
+            # советами и дублируют сообщения.
+            if self._install_workflow is not None:
+                return
             try:
                 if exit_code == 0:
                     controller.add_message(
                         MessageRole.SYSTEM,
                         f"✅ Команда выполнена: {command}")
+                    # Сброс счётчика repair при успехе
+                    self._repair_attempts["count"] = 0
+                    self._repair_attempts["last_cmd"] = ""
                 elif exit_code == -1:
                     controller.add_message(
                         MessageRole.SYSTEM,
                         f"⚠ Команда остановлена: {command}")
                 else:
+                    # Compact, useful tail of the output (stderr + last lines).
+                    tail = self._format_output_tail(output)
                     controller.add_message(
                         MessageRole.SYSTEM,
-                        f"❌ Ошибка (код {exit_code}): {command}")
+                        f"❌ Ошибка (код {exit_code}): {command}\n{tail}"
+                        if tail else
+                        f"❌ Ошибка (код {exit_code}): {command}",
+                    )
+                    # Ask LLM to diagnose and propose a fix.
+                    self._auto_repair_after_error(command, exit_code, tail)
             except Exception as e:
                 logger.error("Terminal finish handling error: %s", e)
             finally:
                 self.status_bar.set_mode("ready")
                 self.title_bar.set_status("В сети", "#3fb950")
+
+        @staticmethod
+        def _format_output_tail(output: str, max_chars: int = 600) -> str:
+            """Trim verbose terminal output to the last ~600 chars,
+            preferring lines with 'error' / 'fail' / 'denied'."""
+            if not output:
+                return ""
+            cleaned = output.strip()
+            if not cleaned:
+                return ""
+            # Prefer error-marker lines.
+            lines = cleaned.splitlines()
+            error_lines = [
+                ln for ln in lines
+                if any(kw in ln.lower() for kw in
+                       ("error", "fail", "denied", "not found", "ошибк",
+                        "невозможно", "недоступн"))
+            ]
+            picked = error_lines[-12:] if error_lines else lines[-12:]
+            tail = "\n".join(picked).strip()
+            if len(tail) > max_chars:
+                tail = tail[-max_chars:]
+            return tail
+
+        def _auto_repair_after_error(self, command: str, exit_code: int,
+                                     tail: str) -> None:
+            """Auto-recover from a failed terminal command.
+
+            Стратегия:
+              1. Классифицируем ошибку по выводу (`tail`).
+              2. Для известных классов (сеть/прокси/DNS, permission, missing
+                 file) — даём ГОТОВЫЙ человекочитаемый ответ без LLM. Это
+                 быстро, надёжно и не зависит от размера контекста.
+              3. Для неизвестных — обращаемся к LLM, но с КРАТКИМ промптом
+                 и без истории, чтобы влезло в малый recovery-контекст.
+              4. Лимит — 1 попытка на сессию для одной команды.
+            """
+            if controller.is_generating():
+                logger.debug("Auto-repair skipped: generation in flight")
+                return
+
+            # Лимит на повторные попытки одной и той же команды.
+            if (self._repair_attempts["last_cmd"] == command
+                    or self._repair_attempts["count"] >= 1):
+                logger.info(
+                    "Auto-repair: skipping (already tried %d times)",
+                    self._repair_attempts["count"],
+                )
+                return
+            self._repair_attempts["count"] += 1
+            self._repair_attempts["last_cmd"] = command
+
+            tail_l = (tail or "").lower()
+
+            # ── 1. Сетевая проблема — ответ без LLM ────────────────────────
+            # Это самый частый кейс на твоей системе (SOCKS5/прокси).
+            # LLM на маленьком контексте + сетевой tail = пустой ответ.
+            # Готовый совет надёжнее.
+            if any(k in tail_l for k in (
+                "socks5", "rejected by the socks", "could not resolve host",
+                "name or service not known", "network is unreachable",
+                "no route to host", "connection refused", "connection timed out",
+                "failed to retrieve", "could not download",
+                "временно недоступн", "сеть недоступн", "host is unreachable",
+            )):
+                logger.info("Auto-repair: network error, giving canned response")
+                self._show_network_repair_advice(command)
+                return
+
+            # ── 2. Permission denied — тоже без LLM ────────────────────────
+            if any(k in tail_l for k in (
+                "permission denied", "operation not permitted",
+                "must be root", "cannot perform this operation",
+                "you cannot perform",
+            )) and not command.lstrip().startswith("sudo "):
+                logger.info("Auto-repair: missing sudo, suggesting it")
+                self._show_sudo_repair_advice(command)
+                return
+
+            # ── 3. database lock (pacman) — без LLM ────────────────────────
+            if "unable to lock database" in tail_l or "could not lock database" in tail_l:
+                logger.info("Auto-repair: pacman db lock, suggesting cleanup")
+                controller.add_message(
+                    MessageRole.ASSISTANT,
+                    "База pacman заблокирована другим процессом или осталась "
+                    "после прерванной транзакции.\n\n"
+                    "Сначала проверь, не запущен ли pacman:\n"
+                    "```bash\n"
+                    "pgrep -a pacman\n"
+                    "```\n"
+                    "Если процесса нет — снять блокировку:\n"
+                    "```bash\n"
+                    "sudo rm /var/lib/pacman/db.lck\n"
+                    "```",
+                )
+                return
+
+            # ── 4. Остальное — короткий запрос к LLM без истории ───────────
+            self._llm_repair(command, exit_code, tail)
+
+        def _show_network_repair_advice(self, command: str) -> None:
+            """Готовый совет по сетевым проблемам pacman."""
+            text = (
+                "🌐 Это сетевая проблема — пакет не скачивается с зеркал. "
+                "Возможные причины: активный SOCKS/VPN-прокси режет соединение "
+                "к зеркалам Arch, медленные/упавшие зеркала, или нет интернета.\n\n"
+                "Проверь интернет:\n"
+                "```bash\n"
+                "ping -c2 archlinux.org\n"
+                "```\n"
+                "Если интернет есть, а проблема в зеркалах — обнови их "
+                "(для CachyOS):\n"
+                "```bash\n"
+                "sudo cachyos-rate-mirrors\n"
+                "```\n"
+                "Затем повтори установку. Если проблема в SOCKS-прокси — "
+                "временно отключи его и попробуй снова."
+            )
+            controller.add_message(MessageRole.ASSISTANT, text)
+
+        def _show_sudo_repair_advice(self, command: str) -> None:
+            """Готовый совет если забыли sudo."""
+            fixed = "sudo " + command.lstrip()
+            controller.add_message(
+                MessageRole.ASSISTANT,
+                "Команда требует прав root. Добавлю sudo:\n\n"
+                f"```bash\n{fixed}\n```",
+            )
+
+        def _llm_repair(self, command: str, exit_code: int, tail: str) -> None:
+            """Минимальный LLM-проход для редких ошибок без истории."""
+            tail_short = (tail or "")[-300:]
+            prompt = (
+                f"[LINA-REPAIR]\n"
+                f"Команда: `{command}`\n"
+                f"Код: {exit_code}\n"
+                f"Вывод (последние строки):\n```\n{tail_short}\n```\n"
+                "Объясни причину 1 предложением и дай ОДНУ исправленную "
+                "команду в ```bash блоке. Без рассуждений."
+            )
+
+            try:
+                logger.info("Auto-repair: querying LLM for fix (exit=%d)", exit_code)
+                controller.add_message(
+                    MessageRole.SYSTEM,
+                    "🔧 Пытаюсь подобрать исправление…",
+                )
+
+                use_streaming = getattr(controller, '_stream_handler', None)
+                if not use_streaming:
+                    handler = getattr(controller, '_request_handler', None)
+                    if not handler:
+                        return
+                    fix_text = handler(prompt)
+                    controller.add_message(MessageRole.ASSISTANT, fix_text)
+                    return
+
+                controller._is_generating = True
+                if controller._on_generation_started:
+                    controller._on_generation_started()
+                placeholder = controller.add_message(
+                    MessageRole.ASSISTANT, "⏳ Думаю...",
+                    status=MessageStatus.PENDING,
+                )
+                self._current_placeholder_id = placeholder.message_id
+                controller._current_stream_id = placeholder.message_id
+
+                from lina.gui.workers import create_streaming_worker_class
+                StreamWorker = create_streaming_worker_class()
+                worker = StreamWorker(controller._stream_handler, prompt)
+                worker.token.connect(self._on_stream_token)
+                worker.finished.connect(self._on_worker_finished)
+                worker.error.connect(self._on_worker_error)
+                self.input_bar.stop_requested.connect(worker.cancel)
+                self._current_worker = worker
+                self._workers.append(worker)
+                worker.start()
+            except Exception as e:
+                logger.error("Auto-repair dispatch failed: %s", e, exc_info=True)
+                controller._is_generating = False
+
+        def _auto_repair_after_block(self, command: str) -> None:
+            """Send a blocked dangerous command back to the LLM with a
+            request to propose a safe alternative.
+
+            Тригерится из `_on_execute_command` когда команда отбита
+            `_DANGEROUS_RE` (например `curl ... | sh`).
+            """
+            if controller.is_generating():
+                logger.debug("Auto-repair-block skipped: generation in flight")
+                return
+
+            prompt = (
+                f"[LINA-REPAIR]\n"
+                f"Эта команда отклонена системой безопасности как "
+                f"«скачать-и-выполнить» / необратимое удаление:\n"
+                f"```bash\n{command}\n```\n"
+                "Предложи БЕЗОПАСНУЮ альтернативу для текущего "
+                "пакетного менеджера: пакет в репозитории, AUR, "
+                "Flatpak, или скачать AppImage руками. "
+                "Только ОДИН ```bash блок с альтернативой. "
+                "Без рассуждений."
+            )
+
+            try:
+                logger.info("Auto-repair-block: querying LLM for safe alternative")
+                use_streaming = getattr(controller, '_stream_handler', None)
+                if not use_streaming:
+                    handler = getattr(controller, '_request_handler', None)
+                    if not handler:
+                        return
+                    fix_text = handler(prompt)
+                    controller.add_message(MessageRole.ASSISTANT, fix_text)
+                    return
+
+                controller._is_generating = True
+                if controller._on_generation_started:
+                    controller._on_generation_started()
+                placeholder = controller.add_message(
+                    MessageRole.ASSISTANT, "⏳ Думаю...",
+                    status=MessageStatus.PENDING,
+                )
+                self._current_placeholder_id = placeholder.message_id
+                controller._current_stream_id = placeholder.message_id
+
+                from lina.gui.workers import create_streaming_worker_class
+                StreamWorker = create_streaming_worker_class()
+                worker = StreamWorker(controller._stream_handler, prompt)
+                worker.token.connect(self._on_stream_token)
+                worker.finished.connect(self._on_worker_finished)
+                worker.error.connect(self._on_worker_error)
+                self.input_bar.stop_requested.connect(worker.cancel)
+                self._current_worker = worker
+                self._workers.append(worker)
+                worker.start()
+            except Exception as e:
+                logger.error("Auto-repair-block dispatch failed: %s", e, exc_info=True)
+                controller._is_generating = False
 
         def _cleanup_worker(self, worker):
             try:
@@ -1416,86 +1750,11 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
         # ── Theme (Block G) ──
 
         def _toggle_theme(self):
-            new_name = "light" if self._current_theme_name == "dark" else "dark"
+            """Switch between light and dark themes (called from title bar)."""
+            current = getattr(self, "_current_theme_name", "dark")
+            new_name = "light" if current == "dark" else "dark"
+            logger.info("GUI: theme %s → %s", current, new_name)
             self._apply_theme(new_name)
-
-        def _selected_pure_model_label(self, tier: str) -> str:
-            return (
-                "Qwen3.5-0.8B (mini)"
-                if str(tier).lower() == "mini"
-                else "Qwen3.5 4B (full)"
-            )
-
-        def _runtime_pure_model_label(self, selected_tier: str) -> str:
-            state = getattr(controller, "_runtime_model_state", None) or {}
-            if state.get("mode") == "pure" and state.get("name"):
-                actual_tier = str(state.get("tier") or selected_tier)
-                label = f"{state['name']} ({actual_tier})"
-                if actual_tier != selected_tier:
-                    label += ", fallback"
-                return label
-            return self._selected_pure_model_label(selected_tier)
-
-        def _set_pure_model_tier(self, tier: str):
-            tier = str(tier).lower()
-            if tier not in {"full", "mini"}:
-                tier = "full"
-            try:
-                settings.set("pipeline", "pure_model_tier", tier)
-                settings.save()
-                controller._runtime_model_state = None
-                self._sync_runtime_mode_ui()
-                controller.add_message(
-                    MessageRole.SYSTEM,
-                    f"Выбрана PURE модель: {self._selected_pure_model_label(tier)}.",
-                )
-            except Exception as e:
-                logger.error("Pure model tier switch error: %s", e, exc_info=True)
-                self._show_error("Не удалось переключить pure-модель.")
-                self._sync_runtime_mode_ui()
-
-        def _toggle_pure_model_tier(self):
-            current = str(getattr(settings.pipeline, "pure_model_tier", "full")).lower()
-            self._set_pure_model_tier("mini" if current == "full" else "full")
-
-        def _sync_runtime_mode_ui(self):
-            """Reflect current pure/pipeline mode in visible UI controls."""
-            pure_mode = bool(settings.pipeline.pure_model_mode)
-            selected_tier = str(getattr(settings.pipeline, "pure_model_tier", "full")).lower()
-            self.title_bar.set_pure_mode(pure_mode)
-            self.title_bar.set_pure_model_tier(
-                selected_tier,
-                self._selected_pure_model_label(selected_tier),
-            )
-            self.status_bar.set_info(
-                f"PURE: {self._runtime_pure_model_label(selected_tier)}"
-                if pure_mode else
-                "PIPE: стандартная обработка"
-            )
-
-        def _on_pure_mode_toggled(self, enabled: bool):
-            """Quick-toggle GUI pure model mode from the title bar."""
-            try:
-                settings.set("pipeline", "pure_model_mode", bool(enabled))
-                settings.save()
-                if enabled:
-                    self.command_bar.hide()
-                self._sync_runtime_mode_ui()
-                selected_tier = str(getattr(settings.pipeline, "pure_model_tier", "full")).lower()
-                controller.add_message(
-                    MessageRole.SYSTEM,
-                    (
-                        "Включён режим PURE: запросы идут напрямую в LLM "
-                        "без RAG, web, tools и pipeline. "
-                        f"Модель: {self._selected_pure_model_label(selected_tier)}."
-                        if enabled else
-                        "Включён режим PIPE: стандартная обработка восстановлена."
-                    ),
-                )
-            except Exception as e:
-                logger.error("Pure mode toggle error: %s", e, exc_info=True)
-                self._show_error("Не удалось переключить режим GUI.")
-                self._sync_runtime_mode_ui()
 
         def _apply_theme(self, theme_name: str):
             try:
@@ -1525,12 +1784,11 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
                 logger.error("Ошибка применения темы: %s", e)
 
         def _open_settings_dialog(self):
-            """Open settings dialog from the main window and refresh runtime UI."""
+            """Open settings dialog from the main window."""
             try:
                 from lina.gui.settings_dialog import create_settings_dialog
                 dialog = create_settings_dialog(parent=self, settings=settings)
                 dialog.exec()
-                self._sync_runtime_mode_ui()
             except Exception as e:
                 logger.error("Settings dialog error: %s", e, exc_info=True)
                 self._show_error("Не удалось открыть настройки.")
@@ -1538,45 +1796,25 @@ def create_main_window(controller=None, settings=None, tray_controller=None):
         # ── Menu ──
 
         def _show_menu_popup(self):
-            """Show popup menu from title bar ⋮ button."""
+            """Show popup menu from title bar ⋮ button.
+
+            Только действия, которых нет в title bar:
+            настройки, очистка чата, помощь, выход.
+            Переключения темы — в title bar.
+            """
             menu = QtWidgets.QMenu(self)
-            settings_action = menu.addAction("⚙ Настройки")
+            settings_action = menu.addAction("⚙  Настройки")
             settings_action.triggered.connect(self._open_settings_dialog)
-            pure_action = menu.addAction(
-                "PURE режим" if not settings.pipeline.pure_model_mode else "PIPE режим"
-            )
-            pure_action.triggered.connect(
-                lambda: self._on_pure_mode_toggled(
-                    not settings.pipeline.pure_model_mode
-                )
-            )
-            model_menu = menu.addMenu("PURE модель")
-            pure_full_action = model_menu.addAction("Qwen2.5 7B (full)")
-            pure_full_action.setCheckable(True)
-            pure_full_action.setChecked(
-                getattr(settings.pipeline, "pure_model_tier", "full") == "full"
-            )
-            pure_full_action.triggered.connect(
-                lambda: self._set_pure_model_tier("full")
-            )
-            pure_mini_action = model_menu.addAction("Phi-3 Mini (mini)")
-            pure_mini_action.setCheckable(True)
-            pure_mini_action.setChecked(
-                getattr(settings.pipeline, "pure_model_tier", "full") == "mini"
-            )
-            pure_mini_action.triggered.connect(
-                lambda: self._set_pure_model_tier("mini")
-            )
             menu.addSeparator()
-            clear_action = menu.addAction("🗑 Очистить чат")
+            clear_action = menu.addAction("🗑  Очистить чат")
             clear_action.triggered.connect(self._on_clear_history)
             menu.addSeparator()
-            about_action = menu.addAction("ℹ️ О программе")
+            about_action = menu.addAction("ℹ  О программе")
             about_action.triggered.connect(self._show_about)
-            help_action = menu.addAction("❓ Команды")
+            help_action = menu.addAction("❓  Команды")
             help_action.triggered.connect(self._show_help)
             menu.addSeparator()
-            quit_action = menu.addAction("⏻ Выход")
+            quit_action = menu.addAction("⏻  Выход")
             quit_action.triggered.connect(self._on_quit)
             menu.exec(self.title_bar._menu_btn.mapToGlobal(
                 QtCore.QPoint(0, self.title_bar._menu_btn.height())))

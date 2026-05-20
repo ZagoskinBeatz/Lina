@@ -72,7 +72,7 @@ class LLMConfig:
 
     # ── Быстрая модель (0.8B, ~1.5 GB RAM) ──
     mini: ModelProfile = field(default_factory=lambda: ModelProfile(
-        model_path=str(MODELS_DIR / "mini_v2" / "Qwen3.5-0.8B-BF16.gguf"),
+        model_path=str(MODELS_DIR / "mini" / "Qwen3.5-0.8B-BF16.gguf"),
         n_ctx=2048,
         n_threads=4,
         n_gpu_layers=0,

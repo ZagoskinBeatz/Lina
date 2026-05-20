@@ -581,6 +581,8 @@ class MainPipeline:
         'расскажи про RTX 4090' → 'RTX 4090'
         """
         q = prev_query.strip()
+        # Снимаем приветствие в самом начале если есть
+        q = re.sub(r"^привет[!,.]?\s+", "", q, flags=re.IGNORECASE).strip()
         # Strip command prefixes
         strip_pats = [
             re.compile(r"^(?:найди|поищи|загугли|нагугли|выясни|узнай)\s+"
@@ -588,11 +590,27 @@ class MainPipeline:
                        re.IGNORECASE),
             re.compile(r"^(?:расскажи|покажи)\s+(?:мне\s+)?(?:о|об|про)\s+",
                        re.IGNORECASE),
+            # Бытовые вступления: «Подскажи, как установить X» → «как установить X»
+            re.compile(r"^(?:подскажи|объясни|посоветуй|скажи)[,.\s]+",
+                       re.IGNORECASE),
+            re.compile(r"^(?:привет[!,.]?\s+)?", re.IGNORECASE),
+            # «как установить/поставить/настроить X на мою систему» → «X»
+            re.compile(r"^как\s+(?:установить|поставить|инсталлировать|"
+                       r"настроить|обновить|удалить|запустить|собрать)\s+",
+                       re.IGNORECASE),
             re.compile(r"^(?:что\s+за|что\s+такое|как\w{0,4})\s+", re.IGNORECASE),
-            re.compile(r"^(?:search|google)\s+(?:for\s+)?\s*", re.IGNORECASE),
+            re.compile(r"^(?:search|google|how\s+to\s+(?:install|setup|configure|update|remove))\s+(?:for\s+)?\s*",
+                       re.IGNORECASE),
         ]
         for pat in strip_pats:
             q = pat.sub("", q).strip()
+        # Снимаем хвост «на мою/свою систему», «на linux», вопросительный знак
+        q = re.sub(
+            r"\s*(?:на\s+(?:мою|свою|вашу|нашу)?\s*(?:систему|пк|компьютер|"
+            r"ноутбук|линукс|linux))\s*[?!.]*\s*$",
+            "", q, flags=re.IGNORECASE,
+        ).strip()
+        q = q.rstrip("?!.").strip()
         # Strip adjectives that precede descriptors
         # e.g. "полные характеристики Realme 10" → "характеристики Realme 10"
         q = re.sub(r"^(?:полн\w*|подробн\w*|детальн\w*|техническ\w*|основн\w*"

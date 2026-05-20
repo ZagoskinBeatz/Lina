@@ -1,6 +1,18 @@
 
-# Model files
-models/full/*.gguf
-models/mini/*.gguf
-models/mini_v2/*.gguf
+# Model files (GGUF — слишком большие для git)
+models/**/*.gguf
+models/**/*.gguf.part
 chroma_db/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Logs
+logs/*.log
+
+# Editor
+.vscode/
+.idea/

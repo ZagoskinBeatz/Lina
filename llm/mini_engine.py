@@ -33,8 +33,8 @@ def _safe_tool_error(error: str | None) -> str:
     return error.split("\n")[0][:100]
 
 
-# Путь к мини-модели
-MINI_MODEL_PATH = str(MODELS_DIR / "mini_v2" / "qwen2.5-1.5b-instruct-q4_k_m.gguf")
+# Путь к мини-модели (синхронизирован с lina/config.py)
+MINI_MODEL_PATH = config.llm.mini.model_path
 
 # Профиль мини-модели
 MINI_PROFILE = ModelProfile(
@@ -46,7 +46,7 @@ MINI_PROFILE = ModelProfile(
     max_tokens=200,     # Короткие ответы (JSON)
     top_p=0.9,
     repeat_penalty=1.1,
-    estimated_ram_mb=1200,
+    estimated_ram_mb=1500,
 )
 
 
@@ -76,7 +76,8 @@ def _build_system_prompt(tools: ToolRegistry, system_context: str = "") -> str:
 • clipboard(action, text) — буфер: action="get"/"set", text=текст при set
 • send_notification(title, message) — уведомление на рабочем столе
 • kill_process(name, force) — убить процесс по имени, force=true для SIGKILL
-• open_url(url) — открыть сайт в браузере: "https://youtube.com"
+• open_url(url) — открыть КОНКРЕТНЫЙ URL в браузере: "https://youtube.com"
+• find_and_open_site(query) — найти сайт через веб-поиск и открыть лучшую ссылку. Используй когда URL неизвестен: "GIMP официальный сайт", "Claude Code GitHub", "Arch Wiki Steam"
 • find_file(pattern, directory) — поиск файлов: pattern="*.pdf", directory="~/Документы"
 • weather(city) — погода: city="Moscow" (опционально)
 • web_search(query) — поиск в интернете: query="установка Max linux"
@@ -135,6 +136,9 @@ def _build_system_prompt(tools: ToolRegistry, system_context: str = "") -> str:
 Открой youtube → {{"tool":"open_url","args":{{"url":"https://youtube.com"}}}}
 Открой дипсик → {{"tool":"open_url","args":{{"url":"https://chat.deepseek.com"}}}}
 Открой ВК → {{"tool":"open_url","args":{{"url":"https://vk.com"}}}}
+Открой страницу установки GIMP → {{"tool":"find_and_open_site","args":{{"query":"GIMP установка официальный сайт"}}}}
+Найди и открой Arch Wiki по Steam → {{"tool":"find_and_open_site","args":{{"query":"Arch Wiki Steam"}}}}
+Открой github проекта Claude Code → {{"tool":"find_and_open_site","args":{{"query":"Claude Code Anthropic GitHub"}}}}
 Найди файл report.pdf → {{"tool":"find_file","args":{{"pattern":"report.pdf"}}}}
 Какая погода? → {{"tool":"weather","args":{{}}}}
 Погода в Перми → {{"tool":"weather","args":{{"city":"Perm"}}}}
@@ -220,6 +224,7 @@ def parse_tool_call(raw_response: str) -> Optional[Tuple[str, Dict[str, Any]]]:
             "power_control": "action", "toggle_wifi": "state",
             "toggle_bluetooth": "state", "night_mode": "state",
             "kill_process": "name", "open_url": "url",
+            "find_and_open_site": "query",
             "find_file": "pattern", "weather": "city",
             "open_app": "app_name", "run_shell": "command",
             "system_info": "category", "ask_full_llm": "query",

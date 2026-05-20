@@ -487,6 +487,22 @@
       "quality": 0.6,
       "timestamp": 1776667805.0884337,
       "freq": 1
+    },
+    {
+      "question": "Расскажи, как установить telegram?",
+      "answer": "🔍 Результаты поиска: «Расскажи, как установить telegram?»\n\n  🔗 https://telegram.org › blog › ultimate-privacy-topics-2-0 › ru\n     telegram.org\n     Telegram https://telegram.org › blog › ultimate-privacy-topics-2-0 › ru Регистрация без сим-карты, автоудаление всех чатов ... 6 dec 2022 ... Telegram входит в пятёрку самых загружаемых приложений в мире — а значит, и в пятёрку самых желанных целей для спамеров. В борьбе за чистоту ...\n\n  🔗 https://skillbox.ru › media › marketing › kak-skachat-i-ustanovit-telegram-poshagovoe-rukovodstvo-so-skrinshotami ›\n     skillbox.ru\n     https://skillbox.ru › media › marketing › kak-skachat-i-ustanovit-telegram-poshagovoe-rukovodstvo-so-skrinshotami › Как скачать и установить Telegram: установка приложения ... 17 jul 2025 ... Существует два способа установить Telegram на смартфон с операционной системой Android: через магазин прилож\n\n  🔗 https://www.computerra.ru › 301316 › kak-ustanovit-telegram-na-kompyuter-poshagovaya-instruktsiya ›\n     www.computerra.ru\n     https://www.computerra.ru › 301316 › kak-ustanovit-telegram-na-kompyuter-poshagovaya-instruktsiya › Как установить Telegram на компьютер в 2026 году Этот процесс не требует особых технических навыков и занимает всего несколько минут. В статье расскажем, как установить Telegram на компьютер, рассмотр\n\n  🔗 https://www.iguides.ru › blogs › narodnyy-bloger › kak-skachat-i-ustanovit-telegram-v-2025-godu-podrobnoe-rukovodstvo-dlya ›\n     www.iguides.ru\n     https://www.iguides.ru › blogs › narodnyy-bloger › kak-skachat-i-ustanovit-telegram-v-2025-godu-podrobnoe-rukovodstvo-dlya › Как скачать и установить Telegram в 2025 году - iGuides 20 dec 2025 ... Чтобы скачать Telegram бесплатно и установить последнюю версию на Android, iPhone, Windows, macOS или L\n\n  🔗 kak-zaregistrirovatsya-v-telegrame\n     journal.sovcombank.ru\n     https://journal.sovcombank.ru › tehnologii › kak-zaregistrirovatsya-v-telegrame Как настроить и использовать Телеграм - Совкомбанк Откройте Google Play; · вве",
+      "source": "llm",
+      "quality": 0.78,
+      "timestamp": 1779274582.1759593,
+      "freq": 1
+    },
+    {
+      "question": "Подскажи, как установить telegram на мою систему?",
+      "answer": "К сожалению, мне не удалось найти информацию о «telegram» в интернете. Попробуйте:\n  • уточнить запрос (например: «telegram характеристики»)\n  • проверить подключение к сети\n  • повторить запрос чуть позже",
+      "source": "llm",
+      "quality": 0.4,
+      "timestamp": 1779274642.2160017,
+      "freq": 1
     }
   ],
   "frequencies": {
@@ -674,7 +690,9 @@
     "привет": 1,
     "здорова": 1,
     "найди отличие ddr4 от ddr5": 1,
-    "какая у меня система": 1
+    "какая у меня система": 1,
+    "расскажи как установить telegram": 1,
+    "подскажи как установить telegram на мою систему": 1
   },
-  "saved_at": 1776667805.0884385
+  "saved_at": 1779274642.2160082
 }

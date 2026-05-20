@@ -128,7 +128,7 @@ def create_settings_dialog(parent=None, settings=None):
             # Model path
             path_row = QtWidgets.QHBoxLayout()
             self._model_path = QtWidgets.QLineEdit()
-            self._model_path.setPlaceholderText("models/full/Qwen2.5-7B-Instruct-Q4_K_M.gguf")
+            self._model_path.setPlaceholderText("models/full/Qwen3.5-4B-Q8_0.gguf")
             btn_browse = QtWidgets.QPushButton("📁")
             btn_browse.setFixedWidth(36)
             btn_browse.clicked.connect(self._browse_model)
@@ -238,30 +238,6 @@ def create_settings_dialog(parent=None, settings=None):
             form.setSpacing(12)
             self._apply_form_style(form, tab)
 
-            self._pure_model_mode = QtWidgets.QCheckBox(
-                "Чистая модель (без RAG, web, tools и Pipeline)"
-            )
-            self._pure_model_mode.toggled.connect(self._sync_pipeline_controls)
-            form.addRow("", self._pure_model_mode)
-
-            self._pure_hint = QtWidgets.QLabel(
-                "В этом режиме GUI отправляет запросы напрямую в LLM: "
-                "без IntentBridge, RAG, web-search, tool execution и pipeline-обвязки."
-            )
-            self._pure_hint.setWordWrap(True)
-            self._pure_hint.setStyleSheet(
-                f"color: {T.text_secondary}; font-size: 12px; padding-bottom: 6px;"
-            )
-            form.addRow("", self._pure_hint)
-
-            self._pure_model_tier = QtWidgets.QComboBox()
-            self._pure_model_tier.addItem("full — Qwen3.5 4B", "full")
-            self._pure_model_tier.addItem("mini — Qwen3.5-0.8B", "mini")
-            self._pure_model_tier.setToolTip(
-                "Какая модель используется, когда включён режим PURE."
-            )
-            form.addRow("PURE модель:", self._pure_model_tier)
-
             self._safe_mode = QtWidgets.QCheckBox("Безопасный режим (только чтение)")
             form.addRow("", self._safe_mode)
 
@@ -281,22 +257,6 @@ def create_settings_dialog(parent=None, settings=None):
             form.addRow("", self._enable_notif)
 
             return tab
-
-        def _sync_pipeline_controls(self):
-            """Disable pipeline-specific toggles when pure model mode is active."""
-            pure_mode = self._pure_model_mode.isChecked()
-            hint = (
-                "Игнорируется в режиме чистой модели"
-                if pure_mode else ""
-            )
-            for widget in (
-                self._safe_mode,
-                self._enable_rag,
-                self._enable_tools,
-                self._enable_cv,
-            ):
-                widget.setEnabled(not pure_mode)
-                widget.setToolTip(hint)
 
         # ── Voice Tab ──
 
@@ -381,17 +341,12 @@ def create_settings_dialog(parent=None, settings=None):
             self._animations.setChecked(s.gui.enable_animations)
 
             # Pipeline
-            self._pure_model_mode.setChecked(s.pipeline.pure_model_mode)
-            idx = self._pure_model_tier.findData(s.pipeline.pure_model_tier)
-            if idx >= 0:
-                self._pure_model_tier.setCurrentIndex(idx)
             self._safe_mode.setChecked(s.pipeline.safe_mode)
             self._enable_rag.setChecked(s.pipeline.enable_rag)
             self._enable_tools.setChecked(s.pipeline.enable_tools)
             self._enable_cv.setChecked(s.pipeline.enable_cv)
             self._enable_streaming.setChecked(s.pipeline.enable_streaming)
             self._enable_notif.setChecked(s.pipeline.enable_notifications)
-            self._sync_pipeline_controls()
 
             # Voice
             self._stt_enabled.setChecked(s.voice.stt_enabled)
@@ -432,11 +387,6 @@ def create_settings_dialog(parent=None, settings=None):
             s.set("gui", "autostart", self._autostart.isChecked())
             s.set("gui", "enable_animations", self._animations.isChecked())
 
-            s.set("pipeline", "pure_model_mode", self._pure_model_mode.isChecked())
-            s.set(
-                "pipeline", "pure_model_tier",
-                self._pure_model_tier.currentData() or "full",
-            )
             s.set("pipeline", "safe_mode", self._safe_mode.isChecked())
             s.set("pipeline", "enable_rag", self._enable_rag.isChecked())
             s.set("pipeline", "enable_tools", self._enable_tools.isChecked())

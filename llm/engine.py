@@ -1,6 +1,24 @@
 """
 Lina — Single Heavy Model LLM Engine (Phase 21).
 
+zbeatz15:46
+Привет! Подскажи, как установить telegram?
+
+LINA15:48
+Привет! Для CachyOS с пакетным менеджером pacman лучше всего использовать официальный пакет из репозиториев.
+
+bash
+sudo pacman -S telegram-desktop
+
+
+bash
+pacman -Qs telegram-desktop | command -v telegram-desktop
+
+
+bash
+telegram-desktop --version
+
+❌ Ошибка (код 1): sudo pacman -S telegram-desktop failed retrieving file 'telegram-desktop-6.7.6-1.1-x86_64_v3.pkg.tar.zst' from mirror.nju.edu.cn : User was rejected by the SOCKS5 server (1 1). error: failed retrieving file 'telegram-desktop-6.7.6-1.1-x86_64_v3.pkg.tar.zst' from mirror.zyner.org : User was rejected by the SOCKS5 server (1 1). error: failed retrieving file 'telegram-desktop-6.7.6-1.1-x86_64_v3.pkg.tar.zst' from mirrors.ustc.edu.cn : User was rejected by the SOCKS5 server (1 1). warning: failed to retrieve some files error: failed to commit transaction (failed to retrieve some files) Errors occurred, no packages were upgraded.
 Одна модель (full, 7-13B+) с ленивой загрузкой через llama-cpp-python.
 
 Поток:
@@ -76,6 +94,246 @@ _RE_SNAPSHOT_LEAKS = [
     _re.compile(r"^\s*НИКОГДА\s+не.*$", _re.MULTILINE | _re.I),
 ]
 _RE_MULTI_NEWLINE = _re.compile(r"\n{3,}")
+
+# ── Чистим markdown-ссылки [Текст](https://...) и голые URL ────────────────
+# Модель часто копирует ссылки из веб-источников несмотря на запрет.
+# Удалять полностью нельзя (могут быть полезные команды с URL внутри
+# `wget`/`curl`), поэтому режем только в обычном тексте, не в код-блоках.
+_RE_MD_LINK = _re.compile(r"\[([^\]]+)\]\(\s*https?://[^)\s]+\s*\)")
+# Голые URL — но только http/https, и только когда они в тексте (не в `code`).
+_RE_BARE_URL = _re.compile(r"(?<!\()\bhttps?://[^\s)>\]]+")
+
+# ── Стоп-токены LLM ──────────────────────────────────────────────────────────
+# Базовые маркеры конца чата + утечки разметки промпта.
+_BASE_STOP_TOKENS = [
+    "</s>",
+    "\n### USER", "\n### SYSTEM", "\n### HISTORY", "\n### CONTEXT",
+    "\nSYSTEM\n", "\nUSER\n", "\nSYSTEM:", "\nUSER:",
+]
+# CoT-открывалки. Только специфические многословные фразы и XML-теги, чтобы
+# не ловить ложные срабатывания на обычных словах вроде "Analyze" или
+# "Request" в нормальном ответе.
+#
+# ВАЖНО: эти строки должны почти никогда не встречаться в нормальном русском
+# ответе. Один шумный стоп-токен делает модель немой — проверено на проде.
+_COT_STOP_TOKENS = [
+    "Thinking Process:",
+    "Thinking Process\n",
+    "<think>",
+    "<thinking>",
+]
+# Полный список передаём в llama_cpp — он остановит генерацию на любом из них.
+LLM_STOP_TOKENS = _BASE_STOP_TOKENS + _COT_STOP_TOKENS
+
+# ── Chain-of-Thought leakage ──────────────────────────────────────────────────
+# Qwen3 / DeepSeek-R1 / Phi-3 могут вставлять в начало ответа блок размышлений
+# на английском (Thinking Process / Analyze the Request / My Role / Constraints…).
+# Удаляем блок и пытаемся восстановить «чистый» ответ.
+_RE_THINK_TAG = _re.compile(
+    r"<think(?:ing)?\b[^>]*>.*?(?:</think(?:ing)?>|$)",
+    _re.IGNORECASE | _re.DOTALL,
+)
+_RE_COT_OPENER = _re.compile(
+    r"\b(?:Thinking\s+Process|Analyze\s+the\s+(?:Request|Provided\s+Context|"
+    r"Question|Input|Context\s*\(Search\s+Results\))|My\s+Role|Constraints|"
+    r"Evaluate\s+Information\s+Availability)\s*[:.]",
+    _re.IGNORECASE,
+)
+# CoT-фразы: режем по последнему вхождению (модель обычно «думает» в начале).
+_RE_COT_PHRASES = _re.compile(
+    r"(?:Thinking\s+Process|Analyze\s+the\s+(?:Request|Provided\s+Context|"
+    r"Question|Input|Context)|My\s+Role|Constraints|"
+    r"Evaluate\s+Information\s+Availability|"
+    r"^\s*\d+\.\s+(?:Analyze|Identify|Plan|Evaluate|Assess|Outline)\b"
+    r")[^\n]*",
+    _re.IGNORECASE | _re.MULTILINE,
+)
+# Явные маркеры финального ответа.
+_RE_COT_END_MARKERS = [
+    _re.compile(
+        r"(?:^|\n)\s*(?:Final\s+(?:Answer|Response)|Ответ|Итог|Резюме)\s*[:\-—]\s*",
+        _re.IGNORECASE,
+    ),
+    _re.compile(r"(?:^|\n)\s*---+\s*(?:\n|$)"),
+]
+# Долю «русскости» строки считаем простым счётчиком символов кириллицы.
+_RE_CYR = _re.compile(r"[А-Яа-яЁё]")
+_RE_LAT = _re.compile(r"[A-Za-z]")
+
+
+def _is_russian_paragraph(text: str, *, min_chars: int = 20,
+                          min_ratio: float = 0.30) -> bool:
+    """True если абзац выглядит как русский ответ (а не английский CoT)."""
+    text = text.strip()
+    if len(text) < min_chars:
+        return False
+    cyr = len(_RE_CYR.findall(text))
+    lat = len(_RE_LAT.findall(text))
+    # Код в ```bash``` блоках содержит латиницу — это OK.
+    if "```" in text and cyr >= 5:
+        return True
+    total = cyr + lat
+    if total == 0:
+        return False
+    return cyr / total >= min_ratio
+
+
+def _strip_urls_outside_code(text: str) -> str:
+    """Strip markdown links and bare URLs outside ``` code blocks.
+
+    Внутри код-блоков ссылки (например, `wget https://...`) сохраняем,
+    они могут быть частью команды.
+    """
+    if "```" not in text:
+        # Нет код-блоков — режем по всему тексту.
+        text = _RE_MD_LINK.sub(lambda m: m.group(1), text)
+        text = _RE_BARE_URL.sub("", text)
+        return text
+
+    # Разбиваем по ``` и обрабатываем только нечётные (вне) сегменты.
+    parts = text.split("```")
+    for i in range(0, len(parts), 2):
+        seg = parts[i]
+        seg = _RE_MD_LINK.sub(lambda m: m.group(1), seg)
+        seg = _RE_BARE_URL.sub("", seg)
+        parts[i] = seg
+    return "```".join(parts)
+
+
+# ── Continuation: проверка «закончен ли ответ» ────────────────────────────────
+_SENTENCE_END_CHARS = set('.!?…»")»\u2014')
+
+
+def _looks_complete(text: str) -> bool:
+    """Heuristic: True if the answer looks finished, False if it looks
+    cut off mid-sentence and might benefit from a continuation pass.
+
+    Учитываем кавычки/скобки/код-блоки в конце и обычное окончание
+    предложения. Не идеально, но достаточно чтобы отличать обрыв
+    «...устано» от законченного абзаца.
+    """
+    if not text:
+        return True
+    text = text.rstrip()
+    # Открытый код-блок (нечётное число ```) — точно не закончен.
+    if text.count("```") % 2 == 1:
+        return False
+    # Закрытый код-блок в конце — закончен.
+    if text.endswith("```"):
+        return True
+    last = text[-1]
+    if last in _SENTENCE_END_CHARS:
+        return True
+    # Закрывающие скобки/кавычки — закончен.
+    if last in (')', ']', '}'):
+        return True
+    # Цифра/процент/единица в конце (например «версия 0.5», «50%», «5 GB») —
+    # допускаем как завершение.
+    if last.isdigit() or last in '%°':
+        return True
+    # Эмодзи / non-BMP символы (в Unicode выше U+1F000) — обычно конец.
+    if ord(last) >= 0x2600:
+        return True
+    return False
+
+
+# ── Постобработка howto-ответов: не больше 2 bash-блоков ──────────────────────
+_RE_BASH_BLOCK = _re.compile(
+    r"```(?:bash|sh|shell|console|zsh|fish)?\s*\n.*?```",
+    _re.DOTALL | _re.IGNORECASE,
+)
+
+
+def _trim_howto_blocks(text: str, max_blocks: int = 2) -> str:
+    """Cap number of code blocks in a how-to answer to keep it focused.
+
+    Пользователь ожидает «1 проверка → 1 действие». Если модель
+    выдала больше блоков (3-5 «или так, или этак») — оставляем
+    первые `max_blocks` и сохраняем текст между ними нетронутым.
+    """
+    if not text:
+        return text
+    blocks = list(_RE_BASH_BLOCK.finditer(text))
+    if len(blocks) <= max_blocks:
+        return text
+    # Конец последнего разрешённого блока
+    cut_at = blocks[max_blocks - 1].end()
+    head = text[:cut_at].rstrip()
+    # Любой текст между last allowed block и (max_blocks+1)-м — выкидываем,
+    # вместе со всем хвостом. Добавляем короткую сноску для пользователя.
+    return head + "\n\n_(Дополнительные варианты обрезаны — "  \
+                  "если этот не подойдёт, попроси «другой способ».)_"
+
+
+def _strip_cot(text: str) -> str:
+    """Remove CoT block, keep the actual answer.
+
+    Стратегия:
+      1) Если есть закрытый `<think>…</think>` — выкидываем блок.
+         Если есть открытый `<think>` БЕЗ закрытия — мы НЕ режем всё:
+         внутри может быть финальный ответ модели (Qwen3-style).
+      2) Если есть явный маркер финала (`Final Answer:`, `Ответ:`, `---`) —
+         берём после ПОСЛЕДНЕГО.
+      3) Берём последний крупный русский абзац (30+ символов) — это
+         типичный паттерн «думала на английском, ответила на русском».
+      4) Иначе режем после последней CoT-фразы.
+      5) Если ничего — возвращаем пусто (caller перегенерит).
+    """
+    if not text:
+        return text
+
+    # 1. Закрытые think-блоки — удаляем целиком.
+    cleaned = _re.sub(
+        r"<think(?:ing)?\b[^>]*>.*?</think(?:ing)?>",
+        "", text, flags=_re.IGNORECASE | _re.DOTALL,
+    )
+    # Открывающий <think> без закрытия — НЕ удаляем, только убираем сам тег
+    # как маркер. Содержимое остаётся в строке, дальше обрабатываем как
+    # обычный текст с CoT-преамбулой.
+    cleaned = _re.sub(r"<think(?:ing)?\b[^>]*>", "", cleaned,
+                      flags=_re.IGNORECASE)
+    cleaned = _re.sub(r"</think(?:ing)?>", "", cleaned, flags=_re.IGNORECASE)
+    cleaned = cleaned.strip()
+
+    head = cleaned[:600]
+    if not _RE_COT_OPENER.search(head) and not _RE_COT_PHRASES.search(head):
+        return cleaned
+
+    # 2. Явные маркеры финала — берём последнее вхождение.
+    for end_re in _RE_COT_END_MARKERS:
+        matches = list(end_re.finditer(cleaned))
+        if matches:
+            tail = cleaned[matches[-1].end():].strip()
+            if _is_russian_paragraph(tail):
+                return tail
+
+    # 3. Самый длинный русский абзац (модель часто думает по-английски,
+    # ответ выдаёт по-русски одним большим блоком).
+    paragraphs = [p.strip() for p in _re.split(r"\n\s*\n", cleaned) if p.strip()]
+    russian_paragraphs = [
+        p for p in paragraphs
+        if _is_russian_paragraph(p, min_chars=30, min_ratio=0.40)
+    ]
+    if russian_paragraphs:
+        # Возвращаем самый длинный — это обычно сам ответ.
+        return max(russian_paragraphs, key=len)
+
+    # 4. Резать по последней CoT-фразе.
+    matches = list(_RE_COT_PHRASES.finditer(cleaned))
+    if matches:
+        last_match = matches[-1]
+        rest = cleaned[last_match.end():]
+        m = _re.search(r"(?:\n\s*\n|(?<=[.!?\n])\s+)(?=[А-ЯЁ])", rest)
+        if m:
+            tail = rest[m.end():].strip()
+            if _is_russian_paragraph(tail):
+                return tail
+        # Любое русское предложение от 15 символов.
+        m2 = _re.search(r"[А-ЯЁ][^.!?\n]{15,}[.!?]", cleaned)
+        if m2:
+            return cleaned[m2.start():].strip()
+
+    return ""
 
 # Phase 21: LLM debug mode — включается через --llm-debug или LLM_DEBUG=1
 _LLM_DEBUG = bool(os.environ.get("LLM_DEBUG", ""))
@@ -646,9 +904,152 @@ class LLMEngine:
         "скажи, что полной информации нет.\n"
     )
 
+    # ── HOWTO MODE: гибрид для запросов «как установить / настроить» ─────────
+    # Здесь модель ИМЕЕТ право использовать собственные знания о Linux
+    # (пакетные менеджеры, типовые шаги), а веб-источники служат подсказкой
+    # про конкретный продукт. Это покрывает кейсы вроде «установи Kiro IDE»,
+    # где про сам Kiro в вебе мало, но процесс установки .tar.gz / AppImage /
+    # AUR — стандартный.
+    _HOWTO_MODE_PROMPT = (
+        "Ты — Lina, русскоязычный ИИ-ассистент для Linux. Помогаешь "
+        "ставить и настраивать ПО.\n\n"
+        "АЛГОРИТМ (выполни строго в этом порядке):\n"
+        "Шаг A. Проверь дистрибутив пользователя в блоке «СИСТЕМА "
+        "ПОЛЬЗОВАТЕЛЯ» в начале промпта. Используй только тот "
+        "пакетный менеджер, что указан там.\n"
+        "Шаг B. Проверь веб-подсказки и подбери ПЕРВЫЙ подходящий "
+        "вариант установки в этом порядке:\n"
+        "  1) родной пакетный менеджер (pacman/apt/dnf/...) с конкретным "
+        "именем пакета,\n"
+        "  2) AUR (если у пользователя Arch/CachyOS) — через yay/paru,\n"
+        "  3) Flatpak (`flatpak install flathub <id>`),\n"
+        "  4) AppImage / .deb / .rpm — скачать руками с GitHub Releases.\n"
+        "Шаг C. Сформируй ответ строго по формату:\n"
+        "  • 1-2 предложения про выбранный способ.\n"
+        "  • Один ```bash блок с проверкой (опционально).\n"
+        "  • Один ```bash блок с командой установки.\n"
+        "  • 1 предложение про результат. Стоп.\n\n"
+        "БЕЗОПАСНОСТЬ — НИКОГДА:\n"
+        "• `curl ... | sh`, `wget ... | bash`, `bash <(curl ...)`. Это "
+        "выдача root-доступа произвольному скрипту из интернета. "
+        "Вместо такого скрипта — пакетный менеджер / AUR / Flatpak / "
+        "ручное скачивание AppImage и проверка перед запуском.\n"
+        "• Команды установки/удаления без sudo — упадут с ошибкой.\n"
+        "• inline-комментарии в ```bash блоках "
+        "(`pacman -S firefox  # browser`) — ломают исполнитель. "
+        "Поясняй ВНЕ блока.\n"
+        "• markdown-ссылки `[текст](url)` или голые https://… в тексте. "
+        "URL разрешён ТОЛЬКО внутри `wget`/`curl` команды и только "
+        "если он явно есть в веб-подсказках.\n"
+        "• Команды для чужих дистрибутивов. У пользователя ОДИН "
+        "пакетный менеджер из блока «СИСТЕМА ПОЛЬЗОВАТЕЛЯ».\n"
+        "• Развёрнутые рассуждения, нумерованные планы, "
+        "английские «Thinking Process / Analyze the Request».\n\n"
+        "ВЕРИФИКАЦИЯ (обязательно после каждого действия):\n"
+        "После ```bash блока с установкой/настройкой — ВСЕГДА дай "
+        "ОТДЕЛЬНЫЙ ```bash блок с проверкой:\n"
+        "  • `pacman -Q <пакет>` или `which <бинарник>` — установлено?\n"
+        "  • `<бинарник> --version` — запускается?\n"
+        "Формат: действие → проверка → краткий вывод. Стоп.\n"
+        "'Команда выполнилась' — НЕ финал. Финал — пользователь может "
+        "ИСПОЛЬЗОВАТЬ результат.\n\n"
+        "ЕСЛИ НЕ ЗНАЕШЬ:\n"
+        "Если в веб-подсказках нет конкретного имени пакета или "
+        "способа — честно скажи «точного имени пакета не нашлось», "
+        "предложи `<пакетный-менеджер> -Ss <имя>` для самостоятельного "
+        "поиска или Flatpak/AppImage. НЕ выдумывай URL и имена.\n"
+    )
+
+    @classmethod
+    def _build_howto_prompt(cls) -> str:
+        """Build howto-mode prompt with dynamic distro info PREPENDED.
+
+        Дистро-блок ставим в самое начало промпта — модели лучше уважают
+        первые токены системного промпта, чем хвост. Иначе на длинном
+        контексте модель «забывает» про pacman и предлагает apt.
+        """
+        try:
+            from lina.utils.distro import get_cached_distro
+            distro = get_cached_distro()
+        except Exception:
+            distro = None
+
+        if not distro or not getattr(distro, "is_known", False):
+            header = (
+                "═══ СИСТЕМА ПОЛЬЗОВАТЕЛЯ ═══\n"
+                "Дистрибутив: НЕ ОПРЕДЕЛЁН.\n"
+                "Спроси пользователя или предложи универсальный способ "
+                "(Flatpak / AppImage / GitHub releases).\n"
+                "═══════════════════════════\n\n"
+            )
+            return header + cls._HOWTO_MODE_PROMPT
+
+        pkg = distro.package_manager
+        pretty = getattr(distro, "pretty_name", "Linux")
+
+        if pkg == "pacman":
+            cmds = (
+                "Установка: sudo pacman -S <пакет>\n"
+                "AUR (если нет в основных репо): yay -S <пакет> | paru -S <пакет>\n"
+                "Поиск: pacman -Ss <запрос>\n"
+                "Проверка: pacman -Qs <пакет> | command -v <бинарник>\n"
+                "ЗАПРЕЩЕНО ДЛЯ ЭТОЙ СИСТЕМЫ: apt, apt-get, dnf, yum, zypper — "
+                "их здесь нет, команды упадут с ошибкой.\n"
+            )
+        elif pkg == "apt":
+            cmds = (
+                "Установка: sudo apt install <пакет>\n"
+                "PPA: sudo add-apt-repository ppa:<owner>/<repo>\n"
+                "Поиск: apt search <запрос>\n"
+                "Проверка: dpkg -l | grep <пакет> | command -v <бинарник>\n"
+                "ЗАПРЕЩЕНО ДЛЯ ЭТОЙ СИСТЕМЫ: pacman, yay, dnf, zypper.\n"
+            )
+        elif pkg == "dnf":
+            cmds = (
+                "Установка: sudo dnf install <пакет>\n"
+                "Репо: sudo dnf copr enable <owner>/<repo>\n"
+                "Поиск: dnf search <запрос>\n"
+                "Проверка: rpm -q <пакет> | command -v <бинарник>\n"
+                "ЗАПРЕЩЕНО ДЛЯ ЭТОЙ СИСТЕМЫ: apt, pacman, zypper.\n"
+            )
+        elif pkg == "zypper":
+            cmds = (
+                "Установка: sudo zypper install <пакет>\n"
+                "Поиск: zypper search <запрос>\n"
+                "Проверка: rpm -q <пакет> | command -v <бинарник>\n"
+                "ЗАПРЕЩЕНО ДЛЯ ЭТОЙ СИСТЕМЫ: apt, pacman, dnf.\n"
+            )
+        else:
+            cmds = (
+                f"Пакетный менеджер: {pkg} (используй его команды).\n"
+            )
+
+        header = (
+            "═══ СИСТЕМА ПОЛЬЗОВАТЕЛЯ ═══\n"
+            f"Дистрибутив: {pretty}\n"
+            f"Пакетный менеджер: {pkg}\n"
+            f"{cmds}"
+            "Универсальные альтернативы (если пакета нет в репо): "
+            "Flatpak, AppImage, GitHub releases, ручная сборка из tar.gz.\n"
+            "═══════════════════════════\n\n"
+        )
+        return header + cls._HOWTO_MODE_PROMPT
+
     # Интенты, для которых НЕ нужен полный системный промпт.
-    # web_search is NOT here — it uses _FACT_MODE_PROMPT (always).
+    # web_search is NOT here — it uses _FACT_MODE_PROMPT or _HOWTO_MODE_PROMPT.
     _CHAT_INTENTS = frozenset({"chat", "math", "rag", "weather_query", "web"})
+
+    # Детектор how-to запросов внутри intent=web_search. Если совпало —
+    # переключаемся со строгого FACT_MODE на гибридный HOWTO_MODE.
+    _RE_HOWTO_QUERY = _re.compile(
+        r"\b(?:как|как\s+(?:установить|поставить|настроить|собрать|"
+        r"скачать|удалить|обновить|запустить|включить|выключить|"
+        r"подключить|починить|исправить|сделать|использовать)|"
+        r"подскажи\s+как|объясни\s+как|"
+        r"how\s+to|install|setup|configure|"
+        r"установка|настройка|инструкция|руководство|гайд|туториал)\b",
+        _re.I,
+    )
 
     # ── Shared prompt assembly ──
 
@@ -669,13 +1070,17 @@ class LLMEngine:
         budget_report = None
 
         if self._context_budget is not None:
-            # FACT MODE: web_search intent ALWAYS uses strict fact-mode prompt.
-            # Previously only activated when context contained "[ПРОВЕРЕННЫЕ ФАКТЫ:]"
-            # marker, but when raw summaries or refusal markers are in context,
-            # the LLM fell back to _CHAT_SYSTEM_PROMPT which has zero
-            # anti-hallucination instructions — enabling fabricated specs.
+            # FACT MODE vs HOWTO MODE: web_search использует один из двух
+            # строгих промптов. Для запросов «как установить / настроить»
+            # включаем гибридный HOWTO MODE — там модель ИМЕЕТ право
+            # использовать свои знания о Linux в дополнение к веб-фактам.
+            # Для всех остальных web_search (specs, цены, факты) — строгий
+            # FACT MODE без права галлюцинировать.
             if intent == "web_search":
-                full_system = self._FACT_MODE_PROMPT
+                if self._RE_HOWTO_QUERY.search(query or ""):
+                    full_system = self._build_howto_prompt()
+                else:
+                    full_system = self._FACT_MODE_PROMPT
             # Компактный промпт для chat/knowledge запросов
             elif intent in self._CHAT_INTENTS:
                 full_system = self._CHAT_SYSTEM_PROMPT
@@ -687,13 +1092,16 @@ class LLMEngine:
                     full_system = sys_prompt + "\n\n" + runtime_section
 
             # CBM: history в формате list[str]
+            # Лимиты подняты с 200/300 до 500/800 — на коротких историях
+            # большие лимиты сэкономят контекст для system prompt'а через
+            # CBM-trimmer. Если бюджет переполнится — он сам ужмёт.
             history_strs = []
             if history:
                 for user_msg, assistant_msg in history[-3:]:
-                    history_strs.append(f"Пользователь: {user_msg[:200]}")
+                    history_strs.append(f"Пользователь: {user_msg[:500]}")
                     if assistant_msg:
-                        short = assistant_msg[:300]
-                        if len(assistant_msg) > 300:
+                        short = assistant_msg[:800]
+                        if len(assistant_msg) > 800:
                             short += "..."
                         history_strs.append(f"Lina: {short}")
 
@@ -892,8 +1300,7 @@ class LLMEngine:
                     temperature=profile.temperature,
                     top_p=profile.top_p,
                     repeat_penalty=profile.repeat_penalty,
-                    stop=["</s>", "\n### USER", "\n### SYSTEM", "\n### HISTORY", "\n### CONTEXT",
-                          "\nSYSTEM\n", "\nUSER\n", "\nSYSTEM:", "\nUSER:"],
+                    stop=LLM_STOP_TOKENS,
                 )
                 try:
                     response = future.result(timeout=llm_timeout)
@@ -902,9 +1309,49 @@ class LLMEngine:
                     return f"⏱ Генерация ответа превысила лимит ({llm_timeout}с). Попробуйте упростить запрос."
 
             answer = response["choices"][0]["text"].strip()
+            raw_len = len(answer)
+            finish_reason = (response.get("choices") or [{}])[0].get("finish_reason", "")
 
             # Убираем утёкшие RAG-маркеры из ответа
             answer = self._clean_answer(answer)
+
+            # ── Auto-recovery: пустой ответ ─────────────────────────
+            # Срабатывает в двух случаях:
+            #  • модель ничего не сгенерила (стоп-токен на первом куске),
+            #  • модель потратила бюджет на CoT, и санайзер всё вырезал.
+            # В обоих случаях прозрачно перегенерим с явным запретом
+            # рассуждений, без RAG/контекста.
+            if not answer.strip():
+                logger.warning(
+                    "Empty answer (raw=%d chars). "
+                    "Regenerating with anti-reasoning prompt.", raw_len,
+                )
+                try:
+                    answer = self._regenerate_direct(
+                        query=query, profile=profile,
+                        timeout=llm_timeout,
+                    )
+                except Exception as e:
+                    logger.error("Auto-recovery failed: %s", e, exc_info=True)
+                    answer = ""
+
+            # ── Continuation: ответ обрезался по max_tokens ────────
+            # Если llama-cpp сообщил finish_reason="length" и ответ
+            # выглядит как незавершённое предложение — догенерируем
+            # продолжение и склеиваем. Так пользователь не получит
+            # обрыв на полуслове.
+            if (finish_reason == "length" and answer
+                    and not _looks_complete(answer)):
+                try:
+                    extra = self._continue_answer(
+                        query=query, partial=answer,
+                        profile=profile, timeout=llm_timeout,
+                    )
+                except Exception as e:
+                    logger.error("Continuation failed: %s", e, exc_info=True)
+                    extra = ""
+                if extra:
+                    answer = (answer + extra).strip()
 
             # Логируем токены ответа
             usage = response.get("usage", {})
@@ -912,6 +1359,13 @@ class LLMEngine:
 
             # Запоминаем tier для sticky-логики
             self._classifier.record(selected_tier)
+
+            # ── Trim множественных bash-блоков ──────────────────────
+            # Модель часто пишет полотно с 4-5 «или так, или этак» вариантами
+            # или зацикливается на одном блоке. Оставляем первые 2 (действие +
+            # проверка) — пользователь выполняет один шаг, и если он не подошёл,
+            # попросит другой. Применяем ВСЕГДА, не только для web_search.
+            answer = _trim_howto_blocks(answer, max_blocks=2)
 
             # Кэшируем
             if use_cache and answer:
@@ -933,6 +1387,8 @@ class LLMEngine:
     @staticmethod
     def _clean_answer(text: str) -> str:
         """Убирает утёкшие маркеры и мусор из ответа LLM."""
+        # Сразу режем CoT-утечки (Thinking Process / <think>) если они есть
+        text = _strip_cot(text)
         # Обрезаем при утечке системного промпта (голый SYSTEM без ###)
         for bare in ("\nSYSTEM\n", "\nSYSTEM:", "\nUSER\n", "\nUSER:"):
             pos = text.find(bare)
@@ -958,9 +1414,193 @@ class LLMEngine:
         # Удаляем утечки системного снимка (дистрибутив, ядро, CPU, RAM, GPU)
         for pat in _RE_SNAPSHOT_LEAKS:
             text = pat.sub("", text)
+        # Чистим markdown-ссылки и голые URL (вне код-блоков). Веб-источники
+        # часто протекают сюда даже когда мы прямо запретили их в промпте.
+        text = _strip_urls_outside_code(text)
         # Убираем лишние пустые строки
         text = _RE_MULTI_NEWLINE.sub("\n\n", text)
         return text.strip()
+
+    def _regenerate_direct(
+        self,
+        query: str,
+        profile,
+        timeout: int = 60,
+    ) -> str:
+        """Re-run the model with a strict anti-reasoning prompt.
+
+        Используется как auto-recovery когда основной ответ оказался
+        пустым (модель не выдала ничего из-за стоп-токена или ушла в CoT).
+        Здесь:
+          • короткий явный системный промпт,
+          • дистро-fact-card если how-to запрос,
+          • МИНИМУМ стоп-токенов,
+          • без агрессивной CoT-очистки на выходе.
+        """
+        if not self._active or not self._active.model:
+            logger.warning("Auto-recovery: no active model")
+            return ""
+
+        # Если это how-to запрос — добавим дистро-fact-card в начало
+        # и попросим модель помочь с установкой/настройкой.
+        is_howto = bool(self._RE_HOWTO_QUERY.search(query or ""))
+        fact_card = ""
+        if is_howto:
+            try:
+                from lina.utils.distro import get_cached_distro
+                d = get_cached_distro()
+                if d and getattr(d, "is_known", False):
+                    pkg = d.package_manager or "?"
+                    pretty = getattr(d, "pretty_name", None) or d.name or "Linux"
+                    fact_card = (
+                        f"СИСТЕМА ПОЛЬЗОВАТЕЛЯ: {pretty} (пакетный менеджер {pkg}).\n"
+                        f"Команды только для {pkg}, чужие — НЕ ПИСАТЬ.\n"
+                    )
+            except Exception:
+                pass
+
+        if is_howto:
+            sys_prompt = (
+                "Ты — Lina, русскоязычный ассистент для Linux. "
+                "Ты помогаешь устанавливать и настраивать ПО на ПК пользователя. "
+                "Отвечай на русском, кратко и по делу. "
+                "Команды оборачивай в ```bash блок. "
+                "Без рассуждений вслух, без английских вступлений."
+            )
+        else:
+            sys_prompt = (
+                "Ты — Lina, русскоязычный ИИ-ассистент для Linux. "
+                "Отвечай НАПРЯМУЮ на русском, кратко, по делу. "
+                "Без английских вводных, без блоков размышлений. "
+                "Если нужны команды — оборачивай их в ```bash блок."
+            )
+
+        prompt = (
+            f"### SYSTEM\n{sys_prompt}\n"
+            f"{fact_card}\n"
+            f"### USER\n{query}\n\n"
+            f"### ASSISTANT\n"
+        )
+
+        recovery_stops = ["</s>", "\n### USER", "\n### SYSTEM"]
+
+        logger.info(
+            "Auto-recovery: prompt_len=%d max_tokens=%d temp=%.2f stops=%d howto=%s",
+            len(prompt),
+            min(profile.max_tokens, 384),
+            max(0.2, min(profile.temperature, 0.6)),
+            len(recovery_stops),
+            is_howto,
+        )
+
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                self._active.model,
+                prompt,
+                max_tokens=min(profile.max_tokens, 384),
+                temperature=max(0.2, min(profile.temperature, 0.6)),
+                top_p=profile.top_p,
+                repeat_penalty=profile.repeat_penalty,
+                stop=recovery_stops,
+            )
+            try:
+                resp = future.result(timeout=timeout)
+            except FuturesTimeout:
+                logger.error("Auto-recovery generation timed out after %ds", timeout)
+                return ""
+
+        text = (resp.get("choices") or [{}])[0].get("text", "").strip()
+        logger.info(
+            "Auto-recovery raw output (%d chars): %.200r",
+            len(text), text,
+        )
+
+        # Лёгкая обработка маркеров.
+        text = _re.sub(r"^\s*(### )?ASSISTANT\s*:?\s*", "", text)
+        text = _re.sub(r"^\s*Ответ\s*[:\-—]\s*", "", text)
+        text = _strip_urls_outside_code(text)
+        text = _RE_MULTI_NEWLINE.sub("\n\n", text)
+
+        # Если recovery выдал CoT — пробуем его срезать. Если после
+        # стрипа полезного текста не осталось — отдаём короткий
+        # человеческий fallback вместо англоязычного «Thinking Process».
+        cleaned = _strip_cot(text).strip()
+        if cleaned:
+            return cleaned
+        if _RE_COT_OPENER.search(text[:400]):
+            logger.warning(
+                "Auto-recovery still leaked CoT, suppressing. Raw: %.200r", text,
+            )
+            return (
+                "Не получилось коротко сформулировать ответ. "
+                "Можешь переспросить — отвечу подробнее."
+            )
+        return text.strip()
+
+    def _continue_answer(
+        self,
+        query: str,
+        partial: str,
+        profile,
+        timeout: int = 60,
+        max_extra_tokens: int = 384,
+    ) -> str:
+        """Догенерировать продолжение если ответ оборвался по max_tokens.
+
+        Идея: даём модели её же незаконченный ответ + просьбу
+        «продолжи с того же места». Модель видит свой контекст и
+        дописывает естественно.
+
+        Возвращает только дельту (новый текст), без partial.
+        """
+        if not self._active or not self._active.model or not partial:
+            return ""
+
+        sys_prompt = (
+            "Ты — Lina, русскоязычный ассистент. Продолжи свой "
+            "предыдущий ответ с того места, где он оборвался. "
+            "НЕ повторяй уже сказанное. НЕ начинай заново. "
+            "Просто допиши концовку — кратко и до точки. "
+            "Без рассуждений и английских вводных."
+        )
+        prompt = (
+            f"### SYSTEM\n{sys_prompt}\n\n"
+            f"### USER\n{query}\n\n"
+            f"### ASSISTANT\n{partial}"
+        )
+
+        recovery_stops = ["</s>", "\n### USER", "\n### SYSTEM"]
+        logger.info(
+            "Continuation: partial_len=%d max_extra=%d",
+            len(partial), max_extra_tokens,
+        )
+
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                self._active.model,
+                prompt,
+                max_tokens=max_extra_tokens,
+                temperature=max(0.2, min(profile.temperature, 0.5)),
+                top_p=profile.top_p,
+                repeat_penalty=profile.repeat_penalty,
+                stop=recovery_stops,
+            )
+            try:
+                resp = future.result(timeout=timeout)
+            except FuturesTimeout:
+                logger.error("Continuation timed out after %ds", timeout)
+                return ""
+
+        extra = (resp.get("choices") or [{}])[0].get("text", "")
+        logger.info("Continuation got %d chars", len(extra))
+        # На continuation не делаем агрессивный CoT-стрип: модель уже
+        # пишет внутри своего предыдущего ответа, риск минимальный.
+        # Только маркеры разметки + URL.
+        extra = _re.sub(r"^\s*(### )?ASSISTANT\s*:?\s*", "", extra)
+        extra = _strip_urls_outside_code(extra)
+        return extra.rstrip()
 
     # ── Streaming generation ──
 
@@ -1035,31 +1675,53 @@ class LLMEngine:
                     pass
 
             tokens_list = []
+            stream_finish_reason = ""
             for chunk in self._active.model(
                 prompt,
                 max_tokens=effective_max_tokens,
                 temperature=profile.temperature,
                 top_p=profile.top_p,
                 repeat_penalty=profile.repeat_penalty,
-                stop=["</s>", "\n### USER", "\n### SYSTEM", "\n### HISTORY", "\n### CONTEXT",
-                      "\nSYSTEM\n", "\nUSER\n", "\nSYSTEM:", "\nUSER:"],
+                stop=LLM_STOP_TOKENS,
                 stream=True,
             ):
                 if cancel_flag[0]:
                     break
+                # Запоминаем последний finish_reason — пригодится для continuation.
+                _fr = chunk["choices"][0].get("finish_reason")
+                if _fr:
+                    stream_finish_reason = _fr
                 token = chunk["choices"][0]["text"]
                 tokens_list.append(token)
-                # Буферизуем первые 15 токенов для раннего обнаружения мусора
-                if len(tokens_list) <= 15:
+                # Буферизуем первые 30 токенов для раннего обнаружения мусора.
+                # 30 — компромисс: достаточно чтобы CoT успел показаться,
+                # но мало чтобы заметно задержать первый токен пользователю.
+                # Стратегия:
+                #   1. Явные утечки разметки (RAG/системный снимок/промпт) → сброс.
+                #   2. Явные CoT-маркеры (Thinking Process, Analyze the Request,
+                #      <think>, и т.п.) → сброс, чтобы caller перегенерил.
+                #   3. Просто английское вступление без CoT-маркеров — пропускаем.
+                if len(tokens_list) <= 30:
                     partial = "".join(tokens_list).strip()
-                    if len(tokens_list) == 15:
-                        cleaned = self._clean_answer(partial)
-                        if not cleaned or len(cleaned) < 3:
-                            # Мусор (системный снимок/промпт утечка) —
-                            # даём сигнал вызывающему коду для web-fallback
+                    if len(tokens_list) == 30:
+                        is_garbage = (
+                            not partial
+                            or _RE_RAG_BLOCK.search(partial) is not None
+                            or _RE_RAG_SRC.search(partial) is not None
+                            or _RE_SECTION_MARKERS.search(partial) is not None
+                            or any(p.search(partial) for p in _RE_PROMPT_LEAKS)
+                            or any(p.search(partial) for p in _RE_SNAPSHOT_LEAKS)
+                        )
+                        is_cot_leak = _RE_COT_OPENER.search(partial) is not None
+                        if is_garbage or is_cot_leak:
                             tokens_list.clear()
-                            logger.warning("Garbage detected in first 15 tokens, suppressing")
-                            yield ""  # пустой токен — сигнал caller'у что ответ пуст
+                            logger.warning(
+                                "Early-stream filter: %s detected, suppressing. "
+                                "Partial: %.150r",
+                                "CoT" if is_cot_leak else "garbage",
+                                partial,
+                            )
+                            yield ""  # сигнал caller'у что ответ пуст
                             break
                         # Сброс буфера — отдаём накопленные токены
                         for buffered in tokens_list:
@@ -1067,17 +1729,69 @@ class LLMEngine:
                 else:
                     yield token
 
-            # Flush buffered tokens if stream ended before 15-token threshold
-            if 0 < len(tokens_list) <= 15:
-                cleaned = self._clean_answer("".join(tokens_list).strip())
-                if cleaned and len(cleaned) >= 3:
-                    for buffered in tokens_list:
-                        yield buffered
+            # Flush buffered tokens if stream ended before 30-token threshold
+            if 0 < len(tokens_list) <= 30:
+                # Здесь стрим закончился раньше 30 токенов — в коротком
+                # ответе CoT обычно не успевает развернуться, отдаём как есть.
+                for buffered in tokens_list:
+                    yield buffered
 
             # Post-process
-            full_answer = "".join(tokens_list).strip()
-            full_answer = self._clean_answer(full_answer)
+            raw_text = "".join(tokens_list).strip()
+            raw_len = len(raw_text)
+            full_answer = self._clean_answer(raw_text)
             self._classifier.record(selected_tier)
+
+            # Diagnostic: log what the raw stream looked like when we end up empty.
+            if not full_answer:
+                logger.info(
+                    "Stream raw output (%d chars, %d tokens): %.300r",
+                    raw_len, len(tokens_list), raw_text[:300],
+                )
+
+            # ── Auto-recovery: пустой ответ в стриме ───────────────
+            # Срабатывает если модель ничего не сгенерила или санайзер
+            # всё вырезал. Перегенерим без стрима, дописываем как продолжение.
+            if not full_answer and not cancel_flag[0]:
+                logger.warning(
+                    "Stream: empty answer (raw=%d). "
+                    "Regenerating with anti-reasoning prompt.", raw_len,
+                )
+                try:
+                    recovered = self._regenerate_direct(
+                        query=query, profile=profile,
+                        timeout=getattr(config.resources, "llm_timeout", 60),
+                    )
+                except Exception as e:
+                    logger.error("Stream auto-recovery failed: %s", e, exc_info=True)
+                    recovered = ""
+                if recovered:
+                    yield recovered
+                    full_answer = recovered
+
+            # ── Continuation: ответ обрезался по max_tokens ────────
+            # Если стрим закончился по причине length и текст оборван
+            # на полуслове — догенерируем продолжение и стримим его дальше.
+            elif (full_answer and not cancel_flag[0]
+                    and stream_finish_reason == "length"
+                    and not _looks_complete(full_answer)):
+                logger.info(
+                    "Stream: hit max_tokens with incomplete tail, continuing. "
+                    "Last 80: %r", full_answer[-80:],
+                )
+                try:
+                    extra = self._continue_answer(
+                        query=query, partial=full_answer,
+                        profile=profile,
+                        timeout=getattr(config.resources, "llm_timeout", 60),
+                    )
+                except Exception as e:
+                    logger.error("Stream continuation failed: %s", e, exc_info=True)
+                    extra = ""
+                if extra:
+                    yield extra
+                    full_answer = (full_answer + extra).strip()
+
             # Cache only valid, non-cancelled, non-garbage responses
             if full_answer and len(full_answer) > 10 and not cancel_flag[0]:
                 self._cache.put(query, full_answer, context,
@@ -1206,10 +1920,10 @@ class LLMEngine:
         if history:
             dialog_parts = []
             for user_msg, assistant_msg in history:
-                dialog_parts.append(f"Пользователь: {user_msg[:200]}")
+                dialog_parts.append(f"Пользователь: {user_msg[:500]}")
                 if assistant_msg:
-                    short = assistant_msg[:300]
-                    if len(assistant_msg) > 300:
+                    short = assistant_msg[:800]
+                    if len(assistant_msg) > 800:
                         short += "..."
                     dialog_parts.append(f"Lina: {short}")
             parts.append(f"\n### HISTORY\n" + "\n".join(dialog_parts))

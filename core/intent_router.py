@@ -741,6 +741,17 @@ class IntentRouter:
             m = p.search(text)
             if m:
                 app_name = m.group(m.lastindex).strip().lower()
+                # Снимаем хвост «в браузере / через браузер / в хроме».
+                # Без этого «открой яндекс музыку в браузере» парсится
+                # как app_name="яндекс музыку в браузере", и SITE_MAP-lookup
+                # промахивается (там просто «яндекс музыка»).
+                app_name = re.sub(
+                    r"\s+(?:в|через)\s+(?:браузере?|хроме?|firefox|chrome|"
+                    r"opera|edge|safari)\.?$",
+                    "",
+                    app_name,
+                    flags=re.IGNORECASE,
+                ).strip()
                 first_word = app_name.split()[0] if app_name else ""
                 if first_word not in self._app_launch_exceptions:
                     return RoutingDecision(

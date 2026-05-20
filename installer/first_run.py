@@ -61,34 +61,29 @@ class ModelOption:
 DEFAULT_MODELS = [
     ModelOption(
         size=ModelSize.SMALL,
-        name="Phi-3 Mini Q4",
-        params="3B",
+        name="Qwen3.5 0.8B (BF16)",
+        params="0.8B",
         ram_required_gb=2.0,
-        disk_required_gb=1.8,
-        description="Быстрая и лёгкая. Подходит для слабых ПК.",
-        filename="phi-3-mini-q4.gguf",
+        disk_required_gb=1.5,
+        description="Быстрая и лёгкая. Function-calling, простые ответы.",
+        download_url=(
+            "https://huggingface.co/bartowski/Qwen_Qwen3.5-0.8B-GGUF/"
+            "resolve/main/Qwen_Qwen3.5-0.8B-bf16.gguf"
+        ),
+        filename="Qwen3.5-0.8B-BF16.gguf",
     ),
     ModelOption(
         size=ModelSize.MEDIUM,
-        name="Qwen2.5 7B Q4",
-        params="7B",
+        name="Qwen3.5 4B (Q8_0)",
+        params="4B",
         ram_required_gb=6.0,
-        disk_required_gb=4.8,
-        description="Оптимальный баланс качества, русского языка и скорости.",
+        disk_required_gb=4.5,
+        description="Сложный анализ, длинные ответы, лучшее качество русского.",
         download_url=(
-            "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/"
-            "resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+            "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/"
+            "resolve/main/Qwen_Qwen3.5-4B-Q8_0.gguf"
         ),
-        filename="Qwen2.5-7B-Instruct-Q4_K_M.gguf",
-    ),
-    ModelOption(
-        size=ModelSize.LARGE,
-        name="LLaMA 3 13B Q4",
-        params="13B",
-        ram_required_gb=8.0,
-        disk_required_gb=7.5,
-        description="Максимальное качество. Требует мощный ПК.",
-        filename="llama-3-13b-q4.gguf",
+        filename="Qwen3.5-4B-Q8_0.gguf",
     ),
 ]
 
@@ -243,12 +238,9 @@ class FirstRunWizard:
         """Рекомендованная модель на основе RAM."""
         self._detect_ram()
         ram = self.state.total_ram_gb
-        if ram >= 10:
-            return self.available_models[2]  # Large
-        elif ram >= 6:
-            return self.available_models[1]  # Medium
-        else:
-            return self.available_models[0]  # Small
+        if ram >= 6:
+            return self.available_models[1]  # Medium (full)
+        return self.available_models[0]      # Small (mini)
 
     def select_model(self, size: str) -> bool:
         """Выбирает модель по размеру ('small', 'medium', 'large')."""
@@ -261,11 +253,19 @@ class FirstRunWizard:
 
     # ── Шаг 3: Скачивание модели ──
 
+    def _model_subdir(self, model: Optional["ModelOption"] = None) -> str:
+        """Подпапка для модели: mini/ для small, full/ для остальных."""
+        m = model or self.state.selected_model
+        if m and m.size == ModelSize.SMALL:
+            return "mini"
+        return "full"
+
     def check_model_exists(self) -> bool:
         """Проверяет, скачана ли выбранная модель."""
         if not self.state.selected_model:
             return False
-        model_path = self.models_dir / "full" / self.state.selected_model.filename
+        model_path = (self.models_dir / self._model_subdir() /
+                      self.state.selected_model.filename)
         return model_path.exists()
 
     def get_download_info(self) -> Dict:
@@ -273,12 +273,13 @@ class FirstRunWizard:
         model = self.state.selected_model
         if not model:
             return {"error": "Модель не выбрана"}
+        subdir = self._model_subdir(model)
         return {
             "model": model.name,
             "size_gb": model.disk_required_gb,
             "url": model.download_url,
             "filename": model.filename,
-            "target_dir": str(self.models_dir / "full"),
+            "target_dir": str(self.models_dir / subdir),
             "already_exists": self.check_model_exists(),
         }
 

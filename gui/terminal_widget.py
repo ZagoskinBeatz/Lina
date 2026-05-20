@@ -200,7 +200,7 @@ def create_embedded_terminal_class():
         └──────────────────────────────────────────────────┘
         """
 
-        command_finished = Signal(int, str)  # exit_code, command
+        command_finished = Signal(int, str, str)  # exit_code, command, output
         command_started = Signal(str)  # command
 
         def __init__(self, parent=None):
@@ -295,6 +295,9 @@ def create_embedded_terminal_class():
 
         def run_command(self, command: str):
             """Execute command in PTY — shows real-time output."""
+            self._run_internal(command)
+
+        def _run_internal(self, command: str):
             # Clean up previous
             self._cleanup()
 
@@ -305,6 +308,7 @@ def create_embedded_terminal_class():
             self._header_icon.setText("▶")
             self._stop_btn.setEnabled(True)
             self._input.clear()
+            self._input.setEnabled(True)
             self._input.setEchoMode(QtWidgets.QLineEdit.EchoMode.Normal)
             self._is_password_prompt = False
 
@@ -333,6 +337,11 @@ def create_embedded_terminal_class():
                 # Set master to non-blocking
                 flags = fcntl.fcntl(master, fcntl.F_GETFL)
                 fcntl.fcntl(master, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+                # Password injection отключена в текущей архитектуре:
+                # sudo-credentials валидируются в InstallWorkflow заранее
+                # через `sudo -v -S` и кэшируются в timestamp. PTY-команды
+                # используют `sudo -n` и не просят пароль вообще.
 
                 # Poll with QTimer (more reliable than QSocketNotifier for PTY)
                 self._timer = QtCore.QTimer()
@@ -370,6 +379,11 @@ def create_embedded_terminal_class():
                     # Detect password prompt
                     lower = text.lower()
                     if "password" in lower or "пароль" in lower:
+                        # Активируем UI password-input. В install workflow
+                        # этот код не сработает — там команды идут под
+                        # `sudo -n` и пароль не запрашивается. Но если
+                        # пользователь сам выполнил `sudo …` через
+                        # CommandActionBar — нужно дать ему ввести.
                         self._is_password_prompt = True
                         self._input.setEchoMode(
                             QtWidgets.QLineEdit.EchoMode.Password)
@@ -405,7 +419,19 @@ def create_embedded_terminal_class():
                     self._on_process_finished(retcode)
 
         def _on_process_finished(self, exit_code: int):
-            """Process has exited."""
+            """Process has exited.
+
+            Idempotent: if _proc is already None (already finished) —
+            no-op. Это защищает от двойной эмиссии command_finished
+            (например, _cleanup → stop → _on_process_finished, а потом
+            poll-loop тоже зовёт _on_process_finished).
+            """
+            if self._proc is None:
+                return
+            # Mark finished BEFORE emitting, чтобы рекурсивные вызовы
+            # (через subscribers) видели finished state.
+            self._proc = None
+
             if self._timer:
                 self._timer.stop()
 
@@ -425,7 +451,7 @@ def create_embedded_terminal_class():
             self._input.setPlaceholderText("Команда завершена")
             self._input.setEnabled(False)
 
-            self.command_finished.emit(exit_code, self._current_command)
+            self.command_finished.emit(exit_code, self._current_command, self._output_buffer)
             self._close_fd()
 
         def _send_input(self):
@@ -449,17 +475,26 @@ def create_embedded_terminal_class():
                     "Ввод (пароль sudo, ответ на вопрос)…")
 
         def stop(self):
-            """Kill the running process."""
-            if self._proc is not None:
-                try:
-                    os.killpg(os.getpgid(self._proc.pid), signal.SIGTERM)
-                except (ProcessLookupError, OSError):
-                    pass
-                try:
-                    self._proc.kill()
-                except (ProcessLookupError, OSError):
-                    pass
+            """Kill the running process and emit command_finished
+            so subscribers (like InstallWorkflow) don't wait forever.
+
+            Idempotent: if no process is running — no-op.
+            """
+            if self._proc is None:
+                return
+            still_running = self._proc.poll() is None
+            try:
+                os.killpg(os.getpgid(self._proc.pid), signal.SIGTERM)
+            except (ProcessLookupError, OSError):
+                pass
+            try:
+                self._proc.kill()
+            except (ProcessLookupError, OSError):
+                pass
+            if still_running:
                 self._output.appendPlainText("\n⚠ Процесс остановлен")
+                # Emit synthetic finished event with code -1 — subscribers
+                # treat it as failure and can re-queue or fail clean.
                 self._on_process_finished(-1)
 
         def close_terminal(self):
@@ -502,18 +537,46 @@ def create_embedded_terminal_class():
                 self._master_fd = None
 
         def _cleanup(self):
-            """Full cleanup of PTY and process."""
+            """Full cleanup of PTY and process.
+
+            If a process is still running we MUST notify subscribers via
+            command_finished — иначе они ждут вечно. _on_process_finished
+            эмитит сигнал и сам зовёт _close_fd().
+            """
             if self._timer:
                 self._timer.stop()
                 self._timer = None
-            self._close_fd()
-            if self._proc is not None:
+
+            had_running_proc = (
+                self._proc is not None
+                and self._proc.poll() is None
+            )
+
+            if had_running_proc:
+                try:
+                    os.killpg(os.getpgid(self._proc.pid), signal.SIGTERM)
+                except (ProcessLookupError, OSError):
+                    pass
                 try:
                     self._proc.kill()
                 except (ProcessLookupError, OSError):
                     pass
-                self._proc = None
+                # Emit synthetic finished BEFORE clearing _proc, so
+                # subscribers see the right command/output.
+                try:
+                    self._on_process_finished(-1)
+                except Exception as e:
+                    logger.error("cleanup _on_process_finished failed: %s", e)
+
+            # _on_process_finished above already calls _close_fd().
+            # If proc was already dead — explicit cleanup of fd/proc.
+            if not had_running_proc:
+                self._close_fd()
+                if self._proc is not None:
+                    self._proc = None
+
             self._input.setEnabled(True)
             self._input.clear()
+            self._is_password_prompt = False
 
     return EmbeddedTerminal

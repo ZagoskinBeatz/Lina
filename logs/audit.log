@@ -476,3 +476,7 @@
 {"timestamp": 1776667644.018695, "time": "2026-04-20 11:47:24", "action": "command", "success": true, "command": "Продолжи", "details": {"response_length": 28, "elapsed_seconds": 41.177}}
 {"timestamp": 1776667738.7962847, "time": "2026-04-20 11:48:58", "action": "command", "success": true, "command": "Mini model", "details": {"response_length": 41, "elapsed_seconds": 42.644}}
 {"timestamp": 1776667805.0882788, "time": "2026-04-20 11:50:05", "action": "command", "success": true, "command": "Какая у меня система", "details": {"response_length": 187, "elapsed_seconds": 49.836}}
+{"timestamp": 1779274550.7639647, "time": "2026-05-20 15:55:50", "action": "command", "success": true, "command": "Привет", "details": {"response_length": 19, "elapsed_seconds": 15.12}}
+{"timestamp": 1779274582.175648, "time": "2026-05-20 15:56:22", "action": "command", "success": true, "command": "Расскажи, как установить telegram?", "details": {"response_length": 2140, "elapsed_seconds": 2.688}}
+{"timestamp": 1779274629.3538978, "time": "2026-05-20 15:57:09", "action": "command", "success": true, "command": "Привет", "details": {"response_length": 19, "elapsed_seconds": 12.826}}
+{"timestamp": 1779274642.2158384, "time": "2026-05-20 15:57:22", "action": "command", "success": true, "command": "Подскажи, как установить telegram на мою систему?", "details": {"response_length": 205, "elapsed_seconds": 0.073}}

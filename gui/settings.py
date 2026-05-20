@@ -72,8 +72,6 @@ class GUISettings(SettingsSection):
 class PipelineSettings(SettingsSection):
     """Настройки Pipeline."""
     safe_mode: bool = False
-    pure_model_mode: bool = False
-    pure_model_tier: str = "full"
     enable_rag: bool = True
     enable_tools: bool = True
     enable_web: bool = True
@@ -267,9 +265,6 @@ class SettingsController:
         if self.gui.language not in ("ru", "en"):
             errors.append("gui.language: ru / en")
 
-        if self.pipeline.pure_model_tier not in ("full", "mini"):
-            errors.append("pipeline.pure_model_tier: full / mini")
-
         if not (0.5 <= self.voice.tts_speed <= 2.0):
             errors.append("voice.tts_speed: 0.5 — 2.0")
 
@@ -282,9 +277,7 @@ class SettingsController:
             f"RAM≤{self.model.max_ram_mb}MB",
             f"GUI: тема={self.gui.theme}, горячая={self.gui.hotkey}, "
             f"автозапуск={'да' if self.gui.autostart else 'нет'}",
-            f"Pipeline: pure={'✓' if self.pipeline.pure_model_mode else '✗'}"
-            f"/{self.pipeline.pure_model_tier}, "
-            f"safe={self.pipeline.safe_mode}, "
+            f"Pipeline: safe={self.pipeline.safe_mode}, "
             f"RAG={'✓' if self.pipeline.enable_rag else '✗'}, "
             f"tools={'✓' if self.pipeline.enable_tools else '✗'}",
             f"Голос: STT={'✓' if self.voice.stt_enabled else '✗'}, "

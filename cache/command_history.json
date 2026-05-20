@@ -747,5 +747,33 @@
   "timestamp": 1776667805.0881174,
   "success": true,
   "category": "general"
+ },
+ {
+  "command": "Привет",
+  "response": "Привет! Чем помочь?",
+  "timestamp": 1779274550.7636693,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Расскажи, как установить telegram?",
+  "response": "🔍 Результаты поиска: «Расскажи, как установить telegram?»\n\n  🔗 https://telegram.org › blog › ultimate-privacy-topics-2-0 › ru\n     telegram.org\n     Telegram https://telegram.org › blog › ultimate-privacy-topics-2-0 › ru Регистрация без сим-карты, автоудаление всех чатов ... 6 dec 2022 ... Telegram входит в пятёрку самых загружаемых приложений в мире — а значит, и в пятёрку самых желанных целей для спамеров. В борьбе за чистоту ...\n\n  🔗 https://skillbox.ru › media › marketing › kak-skachat-i-ust",
+  "timestamp": 1779274582.1754808,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Привет",
+  "response": "Привет! Чем помочь?",
+  "timestamp": 1779274629.3536396,
+  "success": true,
+  "category": "general"
+ },
+ {
+  "command": "Подскажи, как установить telegram на мою систему?",
+  "response": "К сожалению, мне не удалось найти информацию о «telegram» в интернете. Попробуйте:\n  • уточнить запрос (например: «telegram характеристики»)\n  • проверить подключение к сети\n  • повторить запрос чуть позже",
+  "timestamp": 1779274642.2156684,
+  "success": true,
+  "category": "general"
  }
 ]

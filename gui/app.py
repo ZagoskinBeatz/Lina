@@ -19,7 +19,7 @@ import re as _re
 import threading
 import signal
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 logger = logging.getLogger("lina.gui.app")
 
@@ -337,13 +337,6 @@ def _setup_pipeline_handler(controller):
                     except Exception as e:
                         logger.warning("LLMEngine init failed: %s", e)
         return _engine
-
-    def _pure_model_enabled() -> bool:
-        """Return True when GUI should bypass pipeline layers and talk to raw LLM."""
-        try:
-            return bool(settings.pipeline.pure_model_mode)
-        except Exception:
-            return False
 
     _INIT_FAILED = object()  # sentinel for failed init
 
@@ -736,6 +729,17 @@ def _setup_pipeline_handler(controller):
                                     )
                                     direct = fact_set.format_for_user()
                                     return intent, "[DIRECT_FACTS]" + direct
+                                # How-to запрос: НЕ идти в FACT MODE с его строгими
+                                # «отвечай ТОЛЬКО по фактам» правилами. Возвращаем
+                                # raw summary — далее HOWTO MODE переварит его
+                                # с дистро-fact-card и знаниями о пакетных менеджерах.
+                                if _RE_HOWTO_QUERY.search(search_text):
+                                    logger.info(
+                                        "FactPipeline: %d facts, but HOW-TO query — "
+                                        "skipping FACT MODE, falling back to raw summary",
+                                        len(fact_set.facts),
+                                    )
+                                    return intent, resp.summary
                                 logger.info(
                                     "FactPipeline: %d facts, conf=%.2f, using FACT MODE",
                                     len(fact_set.facts), fact_set.confidence,
@@ -813,6 +817,127 @@ def _setup_pipeline_handler(controller):
             logger.debug("Install search error: %s", e)
         return None
 
+    # Кеш для повторных how-to запросов на одно и то же имя
+    _pkg_lookup_cache: Dict[str, str] = {}
+
+    def _extract_install_target(text: str) -> str:
+        """Extract the application name from a how-to install query.
+
+        «как установить telegram на мою систему» → «telegram»
+        «установи telegram» → «telegram»
+        «установи мне telegram» → «telegram»
+        «подскажи, как поставить gimp» → «gimp»
+
+        Returns lowercase, trimmed name. Empty string if nothing found.
+        """
+        # Снимаем приветствия и вступления
+        t = _re.sub(r"^\s*(?:привет[!,.]?\s*)?(?:подскажи|объясни|расскажи)?[,.\s]*",
+                    "", text, flags=_re.IGNORECASE).strip()
+        # Pattern 1: «как установить/поставить/… X»
+        m = _re.search(
+            r"\b(?:как|how\s+to)\s+(?:установить|поставить|инсталлировать|"
+            r"настроить|обновить|удалить|запустить|собрать|"
+            r"install|setup|configure|update|remove)\s+(.+?)"
+            r"(?:\s+(?:на|в|через|using|on)\s+|[?.!]|$)",
+            t, _re.IGNORECASE,
+        )
+        if not m:
+            # Pattern 2: императив «установи/поставь/инсталлируй [мне/себе] X»
+            m = _re.search(
+                r"\b(?:установи|поставь|инсталлируй|скачай\s+и\s+установи)"
+                r"(?:\s+(?:мне|себе|нам|пожалуйста|плиз|плз))*"
+                r"\s+(.+?)"
+                r"(?:\s+(?:на|в|через)\s+|[?.!]|$)",
+                t, _re.IGNORECASE,
+            )
+        if not m:
+            return ""
+        target = m.group(1).strip().lower()
+        # Снимаем ведущие «мне/себе/пожалуйста» если просочились через pattern 1
+        target = _re.sub(
+            r"^(?:мне|себе|нам|пожалуйста|плиз|плз|пж)\s+",
+            "", target, flags=_re.IGNORECASE,
+        ).strip()
+        # Снимаем хвостовые слова-паразиты
+        target = _re.sub(
+            r"\s*(?:мою|свою|вашу|нашу)?\s*(?:систему|пк|компьютер|ноутбук|"
+            r"машину|линукс|linux|тачку)\s*$",
+            "", target, flags=_re.IGNORECASE,
+        ).strip()
+        # Защита от мусора
+        if len(target) > 60 or len(target) < 2:
+            return ""
+        return target
+
+    def _maybe_install_target(text: str) -> Optional[str]:
+        """Если запрос — об установке, вернёт имя приложения. Иначе None.
+
+        Используется для запуска install_workflow в обход LLM.
+        Условия:
+          • в тексте есть install-маркер (`_RE_INSTALL_QUERY`),
+          • удалось извлечь target длиной >= 2 (`_extract_install_target`).
+
+        Возвращает lowercase trimmed name или None.
+        """
+        if not _RE_INSTALL_QUERY.search(text or ""):
+            return None
+        target = _extract_install_target(text)
+        if not target or len(target) < 2:
+            return None
+        return target
+
+    def _local_package_lookup(text: str) -> str:
+        """Search local repositories for the install target and return
+        a compact list of real packages.
+
+        Возвращает текст вроде:
+            telegram-desktop 5.5.4-1: Official Telegram Desktop client
+            64gram-desktop 5.5.4-1: Unofficial Telegram Desktop fork
+        Или пустую строку если ничего не нашлось / репозиторий недоступен.
+        """
+        target = _extract_install_target(text)
+        if not target:
+            return ""
+
+        # Кеш внутри сессии — pacman -Ss дешёвый, но повторять незачем.
+        cached = _pkg_lookup_cache.get(target)
+        if cached is not None:
+            return cached
+
+        try:
+            from lina.system.package_manager import PackageManager
+            pm = PackageManager()
+            results = pm.search(target, limit=8)
+        except Exception as e:
+            logger.debug("PackageManager search failed: %s", e)
+            _pkg_lookup_cache[target] = ""
+            return ""
+
+        if not results:
+            _pkg_lookup_cache[target] = ""
+            return ""
+
+        lines = []
+        for r in results[:6]:
+            name = r.get("name", "")
+            version = r.get("version", "")
+            desc = (r.get("description") or "").strip()
+            if len(desc) > 100:
+                desc = desc[:97] + "…"
+            line = f"  • {name}"
+            if version:
+                line += f" {version}"
+            if desc:
+                line += f": {desc}"
+            lines.append(line)
+
+        formatted = "\n".join(lines)
+        _pkg_lookup_cache[target] = formatted
+        logger.info(
+            "Local package lookup: '%s' → %d results", target, len(results),
+        )
+        return formatted
+
     def _ensure_loaded() -> bool:
         """Загружает модель, если она не в памяти."""
         engine = _get_engine()
@@ -829,6 +954,35 @@ def _setup_pipeline_handler(controller):
     _RE_SPECS_QUERY = _re.compile(
         r"\b(?:характеристик\w*|спецификац\w*|параметр\w*"
         r"|specs|specifications|\u0442ех\.?\s*характеристик\w*)\b",
+        _re.I,
+    )
+
+    # How-to / install / configure: запросы, где модель ДОЛЖНА использовать
+    # свои знания о Linux в дополнение к веб-источникам. Здесь главная
+    # ценность — не «найденные характеристики», а синтез: из обрывков
+    # инструкций + знания пакетных менеджеров получить рабочие команды.
+    _RE_HOWTO_QUERY = _re.compile(
+        r"\b(?:как|как\s+(?:установить|поставить|настроить|собрать|"
+        r"скачать|удалить|обновить|запустить|включить|выключить|"
+        r"подключить|починить|исправить|сделать|использовать)|"
+        r"подскажи\s+как|объясни\s+как|"
+        r"how\s+to|install|setup|configure|"
+        r"установка|настройка|инструкция|руководство|гайд|туториал)\b",
+        _re.I,
+    )
+
+    # Запросы именно про УСТАНОВКУ — для них запускаем install_workflow.
+    # Подмножество HOWTO + явные install-команды.
+    _RE_INSTALL_QUERY = _re.compile(
+        r"\b(?:"
+        r"установ(?:и|ить|ишь)|"
+        r"поставь|поставить|"
+        r"инсталлируй|инсталлировать|"
+        r"скачай\s+и\s+установ|"
+        r"как\s+(?:мне\s+)?(?:установить|поставить|инсталлировать)|"
+        r"подскажи\s*,?\s*как\s+(?:мне\s+)?(?:установить|поставить)|"
+        r"how\s+(?:do\s+i\s+|to\s+)?install"
+        r")\b",
         _re.I,
     )
     _FOLLOWUP_PATS = [
@@ -856,7 +1010,7 @@ def _setup_pipeline_handler(controller):
                 return True
         return False
 
-    def _build_context(text: str, is_followup: bool = False):
+    def _build_context(text: str, is_followup: bool = False, force_chat: bool = False):
         """Build full context: system + RAG + diagnostics + web search + install.
 
         Returns (context, executor, web_intent, web_result, intent).
@@ -864,7 +1018,14 @@ def _setup_pipeline_handler(controller):
         - web_result: summary string or None
         - intent: str — primary intent from IntentRouter
         - is_followup: caller already determined this is a follow-up to web_search
+        - force_chat: skip intent router (auto-repair, internal LLM-only turn)
         """
+        # Auto-repair turns are an internal LLM-only path: force chat intent,
+        # bypass router (it might mis-route them to web_search/system_command).
+        is_repair_turn = force_chat or text.startswith("[LINA-REPAIR]")
+        if text.startswith("[LINA-REPAIR]"):
+            text = text[len("[LINA-REPAIR]"):].lstrip()
+
         # Compute intent ONCE for the entire pipeline
         intent = "chat"
         decision = None
@@ -880,11 +1041,19 @@ def _setup_pipeline_handler(controller):
         except Exception as e:
             logger.debug("IntentRouter error: %s", e)
 
+        # Auto-repair turns force chat — even if router thought "web_search"
+        if is_repair_turn:
+            intent = "chat"
+            decision = None
+            logger.debug("Auto-repair turn: forced intent=chat")
+
         # ── Follow-up detection: после web_search перенаправляем в web_search ──
         # Use the flag from caller (who checked original un-enriched text),
         # because _enrich_followup may add [Контекст:...] prefix that
         # breaks ^-anchored follow-up patterns.
-        _is_followup = is_followup
+        # ВАЖНО: для repair-turn'ов follow-up НЕ применяем — иначе ошибка
+        # терминала уйдёт в web_search вместо локального LLM-исправления.
+        _is_followup = is_followup and not is_repair_turn
         if _is_followup:
             if intent != "web_search":
                 logger.info("GUI follow-up detected: %s → web_search (prev was web_search)", intent)
@@ -961,6 +1130,55 @@ def _setup_pipeline_handler(controller):
             # For chat/knowledge — no system snapshot, keep executor for safety
             full_context = ""
 
+        # ── Proactive grounding для how-to запросов ─────────────────
+        # Если пользователь спрашивает «как установить/настроить X» —
+        # модель ОБЯЗАНА знать дистрибутив и пакетный менеджер ДО ответа,
+        # иначе она угадывает (sudo apt-get на Arch — типичная ошибка).
+        # Поэтому в начало контекста жёстко прибиваем мини-карточку
+        # «что у пользователя» — без полного снимка, чтобы не утекло в ответ.
+        # Это работает даже для intent=web_search.
+        is_howto_query = bool(_RE_HOWTO_QUERY.search(text))
+        if is_howto_query:
+            try:
+                from lina.utils.distro import get_cached_distro
+                d = get_cached_distro()
+                if d and getattr(d, "is_known", False):
+                    pkg = d.package_manager or "?"
+                    pretty = getattr(d, "pretty_name", None) or d.name or "Linux"
+                    fact_card = (
+                        f"[ИЗВЕСТНЫЕ ФАКТЫ О СИСТЕМЕ ПОЛЬЗОВАТЕЛЯ]\n"
+                        f"Дистрибутив: {pretty}\n"
+                        f"Пакетный менеджер: {pkg}\n"
+                        f"Это обязательный контекст. Команды ДОЛЖНЫ "
+                        f"использовать {pkg}. Команды чужих менеджеров "
+                        f"(не {pkg}) — НЕ ПИСАТЬ, они не сработают.\n"
+                        f"---\n"
+                    )
+                    full_context = fact_card + (full_context or "")
+            except Exception as e:
+                logger.debug("Howto distro fact card skipped: %s", e)
+
+        # ── Реальные пакеты из локальных репозиториев ─────────────
+        # Если how-to запрос на установку — ищем имя приложения и делаем
+        # `pacman -Ss <name>`. Подмешиваем результаты в контекст как
+        # «реально доступные пакеты». Без этого модель фантазирует имена
+        # пакетов («pipx install --system claude-code», «git-claude-code»).
+        if is_howto_query:
+            try:
+                pkg_results = _local_package_lookup(text)
+                if pkg_results:
+                    full_context = (
+                        f"[ПАКЕТЫ В РЕПОЗИТОРИЯХ ВАШЕЙ СИСТЕМЫ]\n"
+                        f"{pkg_results}\n"
+                        f"Используй ТОЛЬКО эти точные имена пакетов в "
+                        f"командах установки. НЕ выдумывай и НЕ изменяй "
+                        f"имена.\n"
+                        f"---\n"
+                        + (full_context or "")
+                    )
+            except Exception as e:
+                logger.debug("Local package lookup skipped: %s", e)
+
         # Skip RAG for web_search — KB contains Linux docs, not product specs.
         # Injecting irrelevant RAG causes LLM to hallucinate (e.g. Raspberry Pi
         # content mixed with phone specs).
@@ -1002,18 +1220,48 @@ def _setup_pipeline_handler(controller):
                 clean = _re.sub(
                     r'^\s*https?://\S+\s*$', '', clean, flags=_re.MULTILINE,
                 )
-                full_context = (
-                    full_context
-                    + "\n\n[Результаты веб-поиска — используй ТОЛЬКО эти данные для ответа. "
-                    + "Перескажи найденные факты СВОИМИ словами, кратко и по делу. "
-                    + "НЕ копируй ссылки. НЕ показывай URL. НЕ показывай названия сайтов. "
-                    + "НЕ ВЫДУМЫВАЙ характеристики, числа, модели, цены, даты. "
-                    + "Если в результатах НЕТ конкретных данных про устройство — "
-                    + "ответь: 'К сожалению, мне не удалось найти достоверную информацию.' "
-                    + "НЕ пиши 'процессор неизвестен', 'экран неизвестен' — это выдумка. "
-                    + "Если данных мало — перечисли что нашёл, не додумывай.]\n"
-                    + clean.strip()
-                )
+                # ── Hybrid mode для how-to / install / configure ─────
+                # Здесь МОЖНО (и нужно) использовать собственные знания
+                # модели о Linux — пакетные менеджеры, типовые шаги.
+                # Веб-источники служат подсказкой про конкретный софт,
+                # а команды модель собирает сама. Это снимает кейс типа
+                # «Kiro IDE» — даже если сам туториал не нашёлся, модель
+                # знает как ставить .tar.gz / AppImage / AUR-пакет.
+                is_howto = bool(_RE_HOWTO_QUERY.search(text))
+                if is_howto:
+                    full_context = (
+                        full_context
+                        + "\n\n[ИНСТРУКЦИЯ ДЛЯ HOW-TO ЗАПРОСА]\n"
+                        + "Ниже — обрывки из веб-поиска. Используй их как "
+                        + "ПОДСКАЗКУ про конкретный продукт (название, формат "
+                        + "поставки, ссылка на репозиторий, AUR-пакет).\n"
+                        + "Команды установки/настройки СОБИРАЙ САМ "
+                        + "из своих знаний о Linux — пакетный менеджер "
+                        + "уже определён в секции СИСТЕМА.\n"
+                        + "Если из веб-поиска понятно что софт ставится "
+                        + "из tar.gz / AppImage / .deb / AUR — дай рабочие "
+                        + "команды для текущего дистрибутива.\n"
+                        + "Если из веб-поиска вообще непонятно что это "
+                        + "за софт — честно скажи и предложи "
+                        + "общий способ (поиск в репозитории, AUR, GitHub).\n"
+                        + "НЕ копируй URL и названия сайтов из подсказки.\n"
+                        + "Команды оборачивай в ```bash блоки.\n"
+                        + "---\n"
+                        + clean.strip()
+                    )
+                else:
+                    full_context = (
+                        full_context
+                        + "\n\n[Результаты веб-поиска — используй ТОЛЬКО эти данные для ответа. "
+                        + "Перескажи найденные факты СВОИМИ словами, кратко и по делу. "
+                        + "НЕ копируй ссылки. НЕ показывай URL. НЕ показывай названия сайтов. "
+                        + "НЕ ВЫДУМЫВАЙ характеристики, числа, модели, цены, даты. "
+                        + "Если в результатах НЕТ конкретных данных про устройство — "
+                        + "ответь: 'К сожалению, мне не удалось найти достоверную информацию.' "
+                        + "НЕ пиши 'процессор неизвестен', 'экран неизвестен' — это выдумка. "
+                        + "Если данных мало — перечисли что нашёл, не додумывай.]\n"
+                        + clean.strip()
+                    )
 
         # install_application → real package search results for LLM
         if install_info:
@@ -1076,7 +1324,13 @@ def _setup_pipeline_handler(controller):
             "system_command", "install_application", "system_diagnostic",
             "tool_explicit",
         }
-        if intent and intent not in _EXEC_INTENTS:
+        # Repair-turn'ы и явные how-to install не должны терять bash-блоки:
+        # пользователь нажмёт «Выполнить» в CommandActionBar.
+        _is_repair_response = bool(_re.search(
+            r"(?:```bash|```sh|sudo\s+(?:pacman|apt|dnf|zypper|yay|paru))",
+            response,
+        )) and not (intent and intent in _EXEC_INTENTS)
+        if intent and intent not in _EXEC_INTENTS and not _is_repair_response:
             # Strip ```bash blocks from response for non-system intents
             # so user doesn't see garbage commands
             cleaned = _re.sub(
@@ -1159,289 +1413,6 @@ def _setup_pipeline_handler(controller):
             return pairs[-max_pairs:]
         except Exception:
             return []
-
-    _PURE_MODEL_MARKERS = (
-        "<s>", "</s>", "[INST]", "[/INST]",
-        "<|im_start|>", "<|im_end|>", "<|endoftext|>",
-        "<|user|>", "<|assistant|>", "<|end|>",
-    )
-
-    def _detect_pure_model_family(profile, tier: str = "") -> str:
-        """Infer the prompt template family from the active model path."""
-        model_path = str(getattr(profile, "model_path", "")).lower()
-        model_name = Path(model_path).name.lower()
-        if "qwen" in model_path:
-            return "qwen"
-        if "phi" in model_path or (tier == "mini" and model_name in {"mini.gguf", "mini.v1_mini.gguf"}):
-            return "phi"
-        return "instruct"
-
-    def _describe_pure_model(profile, tier: str) -> str:
-        """Return a short human-readable model label for the GUI."""
-        model_path = str(getattr(profile, "model_path", ""))
-        model_name = Path(model_path).name
-        lowered = model_name.lower()
-        if "qwen3.5-4b" in lowered:
-            return "Qwen3.5 4B"
-        if "qwen3.5-0.8b" in lowered:
-            return "Qwen3.5-0.8B"
-        if "qwen2.5-7b" in lowered:
-            return "Qwen2.5 7B"
-        if "qwen2.5-1.5b" in lowered:
-            return "Qwen2.5 1.5B"
-        if "phi" in lowered or (tier == "mini" and lowered in {"mini.gguf", "mini.v1_mini.gguf"}):
-            return "Phi-3 Mini"
-        if "mistral" in lowered:
-            return "Mistral 7B"
-        return Path(model_path).stem if model_path else tier
-
-    def _store_runtime_model_state(mode: str, tier: str, family: str, profile) -> None:
-        """Expose current runtime model info to the GUI window via controller."""
-        try:
-            controller._runtime_model_state = {
-                "mode": mode,
-                "tier": tier,
-                "family": family,
-                "name": _describe_pure_model(profile, tier),
-                "path": str(getattr(profile, "model_path", "")),
-            }
-        except Exception:
-            pass
-
-    def _pure_model_stop_tokens(family: str) -> list[str]:
-        """Return stop tokens matching the active model family."""
-        if family == "qwen":
-            return ["<|im_end|>", "<|endoftext|>", "<|im_start|>user", "<|im_start|>system"]
-        if family == "phi":
-            return ["<|end|>", "<|user|>", "<|system|>"]
-        return ["</s>", "<s>", "[INST]", "[/INST]"]
-
-    def _sanitize_pure_model_text(text: str, max_chars: int) -> str:
-        """Remove template markers before building a raw prompt."""
-        cleaned = (text or "").replace("\x00", " ")
-        cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n")
-        for marker in _PURE_MODEL_MARKERS:
-            cleaned = cleaned.replace(marker, " ")
-        cleaned = _re.sub(r"[ \t]+\n", "\n", cleaned)
-        cleaned = _re.sub(r"\n{3,}", "\n\n", cleaned)
-        cleaned = cleaned.strip()
-        if max_chars > 0 and len(cleaned) > max_chars:
-            cleaned = cleaned[-max_chars:]
-        return cleaned
-
-    def _build_pure_model_prompt(query: str, history: list, family: str) -> str:
-        """Build a minimal raw prompt matched to the active model family."""
-        turns = []
-        for user_msg, assistant_msg in history[-3:]:
-            clean_user = _sanitize_pure_model_text(user_msg, 500)
-            clean_assistant = _sanitize_pure_model_text(assistant_msg, 700)
-            if not clean_user:
-                continue
-
-            if family == "qwen":
-                turn = f"<|im_start|>user\n{clean_user}<|im_end|>"
-                if clean_assistant:
-                    turn += f"\n<|im_start|>assistant\n{clean_assistant}<|im_end|>"
-            elif family == "phi":
-                turn = f"<|user|>\n{clean_user}<|end|>"
-                if clean_assistant:
-                    turn += f"\n<|assistant|>\n{clean_assistant}<|end|>"
-            else:
-                turn = f"<s>[INST] {clean_user} [/INST]"
-                if clean_assistant:
-                    turn += f" {clean_assistant} </s>"
-            turns.append(turn)
-
-        clean_query = _sanitize_pure_model_text(query, 1500)
-        if family == "qwen":
-            turns.append(f"<|im_start|>user\n{clean_query}<|im_end|>\n<|im_start|>assistant\n")
-        elif family == "phi":
-            turns.append(f"<|user|>\n{clean_query}<|end|>\n<|assistant|>\n")
-        else:
-            turns.append(f"<s>[INST] {clean_query} [/INST]")
-        return "\n".join(turns)
-
-    def _clean_pure_model_answer(text: str, family: str) -> str:
-        """Strip only template artifacts, leaving the raw answer intact."""
-        cleaned = (text or "").replace("\x00", "")
-        if family == "qwen" and "<|im_start|>assistant" in cleaned:
-            cleaned = cleaned.rsplit("<|im_start|>assistant", 1)[-1]
-        elif family == "phi" and "<|assistant|>" in cleaned:
-            cleaned = cleaned.rsplit("<|assistant|>", 1)[-1]
-        elif "[/INST]" in cleaned:
-            cleaned = cleaned.rsplit("[/INST]", 1)[-1]
-        for marker in _PURE_MODEL_MARKERS:
-            cleaned = cleaned.replace(marker, "")
-        cleaned = _re.sub(r"^(assistant|model)\s*:?[ \t]*", "", cleaned, flags=_re.IGNORECASE)
-        cleaned = _re.sub(r"\n{3,}", "\n\n", cleaned)
-        return cleaned.strip()
-
-    def _reset_pure_model_state(model) -> None:
-        """Clear KV cache so raw mode does not inherit the previous prompt state."""
-        if hasattr(model, "reset"):
-            model.reset()
-            return
-        if hasattr(model, "_ctx") and model._ctx is not None:
-            try:
-                from llama_cpp import llama_kv_cache_clear
-                llama_kv_cache_clear(model._ctx.ctx)
-            except Exception:
-                pass
-
-    def _prepare_pure_model(engine):
-        """Load a model for raw GUI mode and return the active llama handle."""
-        preferred_tier = str(getattr(settings.pipeline, "pure_model_tier", "full")).lower()
-        if preferred_tier not in {"full", "mini"}:
-            preferred_tier = "full"
-        fallback_tier = "mini" if preferred_tier == "full" else "full"
-
-        loaded = engine.load(preferred_tier)
-        actual_tier = preferred_tier
-        if not loaded:
-            loaded = engine.load(fallback_tier)
-            actual_tier = fallback_tier
-
-        if not loaded:
-            return None, None, None, "⚠ LLM модель недоступна."
-
-        active = getattr(engine, "_active", None)
-        if not active:
-            return None, None, None, "⚠ LLM модель не загружена."
-
-        active.touch()
-        actual_tier = str(getattr(active, "tier", actual_tier))
-        family = _detect_pure_model_family(active.profile, actual_tier)
-        _store_runtime_model_state("pure", actual_tier, family, active.profile)
-        return active.model, active.profile, family, None
-
-    def _generate_pure_model_response(text: str) -> str:
-        """Direct raw GUI-to-model path with no Lina prompt assembly."""
-        engine = _get_engine()
-        if not engine:
-            return (
-                "⚠ Не удалось создать LLM-движок.\n"
-                "Проверьте установку llama-cpp-python."
-            )
-
-        try:
-            with _engine_lock:
-                model, profile, family, error = _prepare_pure_model(engine)
-                if error:
-                    return error
-
-                history = _get_history()
-                prompt = _build_pure_model_prompt(text, history, family)
-                stop_tokens = _pure_model_stop_tokens(family)
-                _reset_pure_model_state(model)
-
-                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
-                from lina.config import config as _cfg
-
-                temperature = profile.temperature
-                if 0.0 <= float(settings.model.temperature) <= 2.0:
-                    temperature = float(settings.model.temperature)
-
-                max_tokens = profile.max_tokens
-                if int(settings.model.max_tokens) > 0:
-                    max_tokens = min(int(settings.model.max_tokens), profile.max_tokens)
-
-                llm_timeout = getattr(_cfg.resources, "llm_timeout", 120)
-                with ThreadPoolExecutor(max_workers=1) as pool:
-                    future = pool.submit(
-                        model,
-                        prompt,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        top_p=profile.top_p,
-                        repeat_penalty=profile.repeat_penalty,
-                        stop=stop_tokens,
-                    )
-                    try:
-                        response = future.result(timeout=llm_timeout)
-                    except FuturesTimeout:
-                        return (
-                            f"⏱ Генерация ответа превысила лимит ({llm_timeout}с). "
-                            "Попробуйте упростить запрос."
-                        )
-        except Exception as e:
-            logger.error("Pure model generate failed: %s", e, exc_info=True)
-            return f"⚠ Ошибка LLM: {e}"
-
-        raw_text = response["choices"][0]["text"] if response else ""
-        clean_resp = _clean_pure_model_answer(raw_text, family)
-        if not clean_resp:
-            return "⚠ Не удалось получить ответ от модели."
-        return _fix_truncated_response(clean_resp)
-
-    def _generate_pure_model_stream(text: str, cancel_flag: list):
-        """Streaming raw GUI-to-model path with no Lina prompt assembly."""
-        engine = _get_engine()
-        if not engine:
-            yield (
-                "⚠ Не удалось создать LLM-движок.\n"
-                "Проверьте установку llama-cpp-python."
-            )
-            return
-
-        raw_tokens = []
-        emitted = ""
-        try:
-            with _engine_lock:
-                model, profile, family, error = _prepare_pure_model(engine)
-                if error:
-                    yield error
-                    return
-
-                history = _get_history()
-                prompt = _build_pure_model_prompt(text, history, family)
-                stop_tokens = _pure_model_stop_tokens(family)
-                _reset_pure_model_state(model)
-
-                temperature = profile.temperature
-                if 0.0 <= float(settings.model.temperature) <= 2.0:
-                    temperature = float(settings.model.temperature)
-
-                max_tokens = profile.max_tokens
-                if int(settings.model.max_tokens) > 0:
-                    max_tokens = min(int(settings.model.max_tokens), profile.max_tokens)
-
-                for chunk in model(
-                    prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=profile.top_p,
-                    repeat_penalty=profile.repeat_penalty,
-                    stop=stop_tokens,
-                    stream=True,
-                ):
-                    if cancel_flag[0]:
-                        return
-                    token = chunk["choices"][0]["text"]
-                    raw_tokens.append(token)
-                    cleaned = _clean_pure_model_answer("".join(raw_tokens), family)
-                    if len(cleaned) > len(emitted):
-                        delta = cleaned[len(emitted):]
-                        emitted = cleaned
-                        if delta:
-                            yield delta
-        except Exception as e:
-            logger.error("Pure model stream failed: %s", e, exc_info=True)
-            yield f"\n⚠ Ошибка LLM: {e}"
-            return
-
-        full_response = _clean_pure_model_answer("".join(raw_tokens), family)
-        if not full_response:
-            yield "⚠ Не удалось получить ответ от модели."
-            return
-
-        fixed = _fix_truncated_response(full_response)
-        if fixed != full_response:
-            if fixed.startswith(emitted):
-                suffix = fixed[len(emitted):]
-                if suffix:
-                    yield suffix
-            elif not emitted:
-                yield fixed
 
     def _is_llm_deflecting(response: str) -> bool:
         """Detect if LLM suggests googling or deflects to Linux topic."""
@@ -1754,14 +1725,27 @@ def _setup_pipeline_handler(controller):
     def _handler(text: str) -> str:
         """Full LLM pipeline: preprocessor → diagnostics → RAG → web → classify → LLM → execute."""
 
-        if _pure_model_enabled():
-            logger.info("GUI pure model mode: bypassing pipeline layers")
-            return _generate_pure_model_response(text)
+        # Strip [LINA-REPAIR] sentinel so it never reaches the model.
+        is_repair = text.startswith("[LINA-REPAIR]")
+        if is_repair:
+            text = text[len("[LINA-REPAIR]"):].lstrip()
+
+        # ── Install workflow: автономная установка пакета ────────────
+        # Запросы вида «установи telegram», «как установить gimp» —
+        # отдаём GUI sentinel, main_window запустит InstallWorkflow.
+        # Workflow сам всё сделает: поиск пакета, sudo pacman -S,
+        # проверка, авто-фикс ошибок, верификация бинаря.
+        if not is_repair:
+            install_target = _maybe_install_target(text)
+            if install_target:
+                logger.info("Install workflow trigger: target='%s'", install_target)
+                return f"[LINA-INSTALL]{install_target}"
 
         # ── Fast-path: direct answers without LLM ──
-        # Skip fast-path when this is a follow-up to web_search
-        # (e.g. "А какой процессор" after asking about phone specs)
-        _skip_fast = _is_web_followup(text)
+        # Skip fast-path for:
+        #   1) follow-up to web_search (e.g. "А какой процессор" after specs query)
+        #   2) auto-repair turns (force LLM path)
+        _skip_fast = _is_web_followup(text) or is_repair
         if not _skip_fast:
             try:
                 _, pp, _ = _get_system_context()
@@ -1781,7 +1765,7 @@ def _setup_pipeline_handler(controller):
         # Enrich follow-up queries with subject from history
         enriched_text = _enrich_followup(text)
 
-        full_context, executor, web_intent, web_result, intent, decision = _build_context(enriched_text, is_followup=_skip_fast)
+        full_context, executor, web_intent, web_result, intent, decision = _build_context(enriched_text, is_followup=_skip_fast, force_chat=is_repair)
         _save_last_intent(intent, query=text)
 
         # ── Direct web results (weather/currency) — skip LLM ──
@@ -1885,7 +1869,11 @@ def _setup_pipeline_handler(controller):
         # If the LLM says "I don't know" after receiving verified facts
         # (or a refusal marker), that IS the correct answer.
         # Re-searching and re-generating is what causes fabricated specs.
-        if intent != "web_search" and (
+        # Также НЕ запускаем web-fallback на коротких follow-up'ах вроде
+        # «Давай ещё раз» — короткий пользовательский ввод не имеет смысла
+        # искать в интернете.
+        _is_short_followup = len(text.strip()) < 25
+        if intent != "web_search" and not _is_short_followup and (
             _is_llm_deflecting(response) or _is_vague_answer(response, text)
         ):
             enhanced = _web_search_fallback(text, full_context)
@@ -1963,19 +1951,34 @@ def _setup_pipeline_handler(controller):
         # ── Truncation detection: if response ends mid-sentence, append ellipsis ──
         response = _fix_truncated_response(response)
 
-        return _execute_commands(response, executor, intent)
+        # GUI-режим: НЕ выполняем bash-блоки автоматически. Пользователь
+        # сам нажмёт «Выполнить» в CommandActionBar после прочтения ответа.
+        # Авто-выполнение через ActionExecutor с interactive=False ломает
+        # sudo-команды (просит пароль, которого никто не введёт) и обходит
+        # подтверждение пользователя.
+        return response
 
     def _stream_handler(text: str, cancel_flag: list):
         """Streaming LLM pipeline: preprocessor → yields tokens one by one."""
 
-        if _pure_model_enabled():
-            logger.info("GUI pure model mode (stream): bypassing pipeline layers")
-            yield from _generate_pure_model_stream(text, cancel_flag)
-            return
+        # Strip [LINA-REPAIR] sentinel so it never reaches the model.
+        is_repair = text.startswith("[LINA-REPAIR]")
+        if is_repair:
+            text = text[len("[LINA-REPAIR]"):].lstrip()
+
+        # ── Install workflow trigger ────────────────────────────────
+        if not is_repair:
+            install_target = _maybe_install_target(text)
+            if install_target:
+                logger.info("Install workflow trigger (stream): '%s'", install_target)
+                yield f"[LINA-INSTALL]{install_target}"
+                return
 
         # ── Fast-path: direct answers without LLM ──
-        # Skip fast-path when this is a follow-up to web_search
-        _skip_fast = _is_web_followup(text)
+        # Skip fast-path for:
+        #   1) follow-up to web_search (e.g. "А какой процессор...")
+        #   2) auto-repair turns (force LLM path)
+        _skip_fast = _is_web_followup(text) or is_repair
         if not _skip_fast:
             try:
                 _, pp, _ = _get_system_context()
@@ -1996,7 +1999,7 @@ def _setup_pipeline_handler(controller):
         # Enrich follow-up queries with subject from history
         enriched_text = _enrich_followup(text)
 
-        full_context, executor, web_intent, web_result, intent, decision = _build_context(enriched_text, is_followup=_skip_fast)
+        full_context, executor, web_intent, web_result, intent, decision = _build_context(enriched_text, is_followup=_skip_fast, force_chat=is_repair)
         _save_last_intent(intent, query=text)
 
         # ── Direct web results (weather/currency) — skip LLM ──
@@ -2135,8 +2138,34 @@ def _setup_pipeline_handler(controller):
                 yield f"\n⚠ Повторная генерация не удалась: {e}"
             return
 
+        # ── Anti-Hallucination Guard для streaming web_search ──
+        # Если факты были собраны из веба, но модель выдала generic-ответ
+        # «зависит от модели камеры…» — заменяем на структурированные факты.
+        # Без этого пользователь видит вымышленные данные вместо реальных.
+        if (intent == "web_search" and _last_fact_set[0]
+                and _last_fact_set[0].facts):
+            try:
+                if _is_generic_hallucination(full_response):
+                    logger.warning(
+                        "Stream anti-hallucination: generic text detected, "
+                        "replacing with %d extracted facts",
+                        len(_last_fact_set[0].facts),
+                    )
+                    facts_response = _last_fact_set[0].format_for_user()
+                    # Полностью заменяем поток на форматированные факты:
+                    # стираем то что уже выдали, отдаём факты.
+                    yield "\n\n---\n📋 Уточнённые данные из веб-источников:\n"
+                    yield facts_response
+                    return
+            except Exception as e:
+                logger.debug("Stream anti-hallucination guard error: %s", e)
+
         # ── Detect deflection OR vague answer → web search fallback ──
-        if _is_llm_deflecting(full_response) or _is_vague_answer(full_response, text):
+        # Skip on short follow-ups (e.g. «Давай ещё раз»).
+        _is_short_followup = len(text.strip()) < 25
+        if not _is_short_followup and (
+            _is_llm_deflecting(full_response) or _is_vague_answer(full_response, text)
+        ):
             enhanced = _web_search_fallback(text, full_context)
             if enhanced:
                 yield "\n\n---\n\U0001f50d Уточняю...\n"
@@ -2152,12 +2181,14 @@ def _setup_pipeline_handler(controller):
                 return  # Skip command execution for deflection
 
         # Execute commands
-        exec_response = _execute_commands(full_response, executor, intent)
-        if exec_response != full_response:
-            # Append execution results as final token
-            extra = exec_response[len(full_response):]
-            if extra:
-                yield extra
+        # GUI-режим: НЕ выполняем bash автоматически. Пользователь нажмёт
+        # «Выполнить» в CommandActionBar. Иначе sudo-команды улетают в
+        # interactive=False ActionExecutor и пропускаются.
+        # exec_response = _execute_commands(full_response, executor, intent)
+        # if exec_response != full_response:
+        #     extra = exec_response[len(full_response):]
+        #     if extra:
+        #         yield extra
 
     controller.set_request_handler(_handler)
     controller.set_stream_handler(_stream_handler)

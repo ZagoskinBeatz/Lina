@@ -220,9 +220,11 @@ _DANGEROUS_PATTERNS = [
     r"\bexec\s",
     r"bash\s+-c\s",
     r"sh\s+-c\s",
-    # Download-and-execute
-    r"(curl|wget)\s.*\|\s*(sh|bash)",
-    r"base64\s.*\|\s*(sh|bash)",
+    # Download-and-execute (any pipe-to-shell, even via sudo/env/nohup)
+    r"(curl|wget|fetch)\s.*\|\s*(?:sudo\s+)?(?:env\s+\S+\s+)?(?:nohup\s+)?(sh|bash|zsh|dash|ksh|fish|python[23]?|perl|ruby)\b",
+    r"(curl|wget|fetch)\s.*\|\s*(?:su\s+(?:-c\s+)?)?[\"']?(sh|bash)[\"']?",
+    # base64-decode-and-execute
+    r"base64\s.*\|\s*(?:sudo\s+)?(sh|bash)",
     # Destructive find
     r"find\s.*-delete",
     r"find\s.*-exec\s+rm\s",
@@ -259,6 +261,101 @@ _SAFE_AUTO_PATTERNS = [
     r"^(echo|printf)\s",
 ]
 _SAFE_AUTO_RE = re.compile("|".join(_SAFE_AUTO_PATTERNS), re.IGNORECASE)
+
+
+def _strip_inline_comment(line: str) -> str:
+    """Strip a trailing `# comment` from a shell command line.
+
+    Корректно обрабатывает `#` внутри кавычек: `echo "hello # world"` —
+    не комментарий. А вот `pacman -S firefox  # install` — да.
+    """
+    if "#" not in line:
+        return line
+    in_single = False
+    in_double = False
+    out = []
+    i = 0
+    while i < len(line):
+        c = line[i]
+        if c == "\\" and i + 1 < len(line):
+            out.append(c)
+            out.append(line[i + 1])
+            i += 2
+            continue
+        if c == "'" and not in_double:
+            in_single = not in_single
+            out.append(c)
+            i += 1
+            continue
+        if c == '"' and not in_single:
+            in_double = not in_double
+            out.append(c)
+            i += 1
+            continue
+        if c == "#" and not in_single and not in_double:
+            # Комментарий — обрезаем всё до конца строки.
+            break
+        out.append(c)
+        i += 1
+    return "".join(out).rstrip()
+
+
+# Команды, которые ТРЕБУЮТ root и почти всегда нуждаются в sudo.
+# Если LLM выдала такую команду без sudo — добавим его автоматически.
+# Это типичная ошибка моделей: они помнят, что pacman -S ставит пакет,
+# но забывают про sudo. Без него команда просто упадёт.
+_SUDOER_FIRST_WORDS = {
+    "pacman", "apt", "apt-get", "dnf", "yum", "zypper",
+    "pkg", "emerge", "xbps-install", "xbps-remove",
+    "systemctl", "journalctl",
+    "mount", "umount",
+    "mkfs", "fdisk", "parted",
+    "useradd", "userdel", "usermod", "groupadd", "groupdel",
+    "chown", "chmod",  # часто, но не всегда
+    "modprobe", "rmmod", "insmod",
+    "iptables", "nft", "ufw",
+    "swapon", "swapoff",
+    "hwclock", "timedatectl",
+}
+# Подмножество subcommands, которые точно требуют root.
+_SUDO_REQUIRED_SUBCOMMANDS = {
+    "pacman": {"-S", "-Sy", "-Syu", "-Syyu", "-R", "-Rs", "-Rns", "-U"},
+    "apt":     {"install", "remove", "purge", "update", "upgrade",
+                "dist-upgrade", "autoremove"},
+    "apt-get": {"install", "remove", "purge", "update", "upgrade",
+                "dist-upgrade", "autoremove"},
+    "dnf":     {"install", "remove", "upgrade", "update", "autoremove"},
+    "yum":     {"install", "remove", "upgrade", "update"},
+    "zypper":  {"install", "in", "remove", "rm", "update", "up", "dup"},
+    "systemctl": {"start", "stop", "restart", "reload", "enable", "disable",
+                  "mask", "unmask"},
+}
+
+
+def _needs_sudo_prefix(line: str) -> bool:
+    """Heuristic: True if command must be prefixed with sudo to actually run.
+
+    Защищает от типичной LLM-ошибки: модель помнит что `pacman -S` ставит
+    пакет, но забывает sudo. Без sudo команда упадёт с «you cannot perform
+    this operation unless you are root».
+    """
+    if line.startswith("sudo "):
+        return False
+    parts = line.split()
+    if not parts:
+        return False
+    head = parts[0]
+    if head not in _SUDOER_FIRST_WORDS:
+        return False
+    # Для пакетных менеджеров проверяем подкоманду — иначе можно случайно
+    # форснуть sudo на read-only вызовы вроде `pacman -Q`.
+    subs = _SUDO_REQUIRED_SUBCOMMANDS.get(head)
+    if subs is not None:
+        if len(parts) < 2:
+            return False
+        return parts[1] in subs
+    # Для остальных — добавляем sudo по умолчанию.
+    return True
 
 # Shell builtins — нельзя выполнить через subprocess (это не бинарники)
 _SHELL_BUILTINS = frozenset({
@@ -310,13 +407,35 @@ def extract_commands(llm_response: str) -> List[ExtractedCommand]:
     for block in code_blocks:
         for line in block.strip().splitlines():
             line = line.strip()
-            # Убрать промпт-префиксы
-            line = re.sub(r"^[\$#>]\s*", "", line)
+            # Сначала отсекаем пустые строки и комментарии (в т.ч. `# заголовок`)
             if not line or line.startswith("#"):
+                continue
+            # Затем снимаем bash-промпт-префиксы вроде `$ ls` или `> echo`
+            stripped = re.sub(r"^[\$>]\s*", "", line)
+            if not stripped or stripped.startswith("#"):
+                continue
+            line = stripped
+
+            # Срезаем inline-комментарий `cmd ... # comment` — без этого
+            # `shlex.split` оставит `#` и слова после в argv, и команда упадёт.
+            # Учитываем что `#` внутри одинарных/двойных кавычек —
+            # не комментарий, а часть строки.
+            line = _strip_inline_comment(line)
+            if not line:
                 continue
 
             cmd = ExtractedCommand(command=line)
             cmd.needs_sudo = line.startswith("sudo ")
+
+            # Авто-исправление: если LLM забыла sudo для pacman/apt/dnf
+            # и подобных — добавляем его сами. Без sudo команда упадёт
+            # с «you cannot perform this operation unless you are root».
+            if not cmd.needs_sudo and _needs_sudo_prefix(line):
+                line = "sudo " + line
+                cmd.command = line
+                cmd.needs_sudo = True
+                logger.debug("auto-prefixed sudo: %s", line)
+
             cmd.is_dangerous = bool(_DANGEROUS_RE.search(line))
             cmd.is_safe_auto = bool(_SAFE_AUTO_RE.match(
                 line.replace("sudo ", "", 1) if cmd.needs_sudo else line
@@ -780,12 +899,25 @@ class QueryPreprocessor:
         _has_product = bool(_PRODUCT_CONTEXT_RE.search(stripped))
 
         if not _has_action and not _has_product:
-            for key, cmd in sorted(_DIRECT_QUERIES.items(), key=lambda kv: -len(kv[0])):
-                if key in normalized:
-                    result = self._run_safe(cmd)
-                    if result is not None:
-                        return result
-                    break
+            # Пропускаем direct-query fast-path для install / how-to запросов:
+            # «как установить telegram» содержит "ram" в слове "telegram",
+            # и без этой защиты улетит в `free -h`.
+            _is_install_or_howto = bool(re.search(
+                r"\b(?:как\s+|подскаж|объясн|расскаж|hint|how\s+to|"
+                r"установ|поставь|настро|удал|снес|обнов|инсталл|"
+                r"запуст|открой|включи|выключи)\b",
+                normalized,
+            ))
+            if not _is_install_or_howto:
+                for key, cmd in sorted(_DIRECT_QUERIES.items(), key=lambda kv: -len(kv[0])):
+                    # Whole-word match: "ram" не должен ловиться в "telegram",
+                    # "ip" — в "skype", и т.п. Для русских стемов с дефисом или
+                    # без — границы слова работают через \b.
+                    if re.search(r"\b" + re.escape(key) + r"\b", normalized):
+                        result = self._run_safe(cmd)
+                        if result is not None:
+                            return result
+                        break
 
         # 3. Паттерны яркости с процентами («яркость 80%»)
         m = re.search(r"яркость.*?(\d{1,3})\s*%?", normalized)
@@ -861,6 +993,28 @@ class QueryPreprocessor:
         m = _OPEN_PATTERN.match(stripped)
         if m:
             app_name = m.group(1).strip().lower()
+            # Снимаем хвост «в браузере / через хром …» — без этого
+            # «открой яндекс музыку в браузере» уйдёт в резолвер по слову
+            # «браузер» и запустит пустой Firefox.
+            app_name = re.sub(
+                r"\s+(?:в|через)\s+(?:браузере?|хроме?|firefox|chrome|"
+                r"opera|edge|safari)\.?$",
+                "", app_name, flags=re.IGNORECASE,
+            ).strip()
+
+            # Сначала проверяем известные сайты (яндекс музыка, ютуб, …) —
+            # ДО локального резолвера. Иначе для запроса «открой яндекс
+            # музыку в браузере» резолвер по слову «браузер» запустит
+            # Firefox без URL.
+            try:
+                from lina.core.tools import ToolRegistry
+                _reg = ToolRegistry()
+                site_result = _reg._try_open_known_site(app_name)
+                if site_result is not None and site_result.success:
+                    return site_result.output
+            except Exception as e:
+                logger.debug("Site-map fast-path error: %s", e)
+
             try:
                 from lina.core.application_resolver import get_resolver
                 resolver = get_resolver()

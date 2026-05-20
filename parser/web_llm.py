@@ -4,7 +4,7 @@ web_llm.py — Local mini-GGUF model for web content summarisation.
 
 Adapted from Parcer/search_cli/llm.py for lina integration.
 
-Uses lina's existing mini model (mini.gguf) to summarize extracted web text.
+Uses lina's existing mini model (Qwen3.5-0.8B) to summarize extracted web text.
 All inference is thread-safe via a global lock.
 """
 
@@ -16,7 +16,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional, List, Dict
 
-from lina.config import MODELS_DIR
+from lina.config import config
 
 logger = logging.getLogger("lina.parser.web_llm")
 
@@ -24,8 +24,8 @@ logger = logging.getLogger("lina.parser.web_llm")
 # Model configuration (uses lina's existing model paths)
 # ---------------------------------------------------------------------------
 
-LLM_MODEL_PATH_MINI = MODELS_DIR / "mini" / "mini.gguf"
-LLM_MODEL_PATH_FULL = MODELS_DIR / "full" / "Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+LLM_MODEL_PATH_MINI = Path(config.llm.mini.model_path)
+LLM_MODEL_PATH_FULL = Path(config.llm.full.model_path)
 
 # Default model for web summarisation — mini is fast and sufficient
 LLM_MODEL_PATH = LLM_MODEL_PATH_MINI
@@ -456,6 +456,25 @@ def _clean_summary(text: str) -> str:
     """Post-process LLM output: strip noise, dedup, clean up."""
     if not text:
         return ""
+
+    # ── Strip <think> blocks and CoT preambles ─────────────────
+    # Qwen3 / DeepSeek-R1 и пр. могут вставлять блок размышлений.
+    text = re.sub(
+        r'<think(?:ing)?\b[^>]*>.*?(?:</think(?:ing)?>|$)',
+        '', text, flags=re.IGNORECASE | re.DOTALL,
+    )
+    # Если в начале есть «Thinking Process:» или «Analyze the Request» —
+    # отрезаем всё до первого пустого абзаца с русским/новым текстом.
+    if re.search(
+        r'\b(?:Thinking\s+Process|Analyze\s+the\s+Request|My\s+Role|Constraints)\s*:',
+        text[:400], re.IGNORECASE,
+    ):
+        m = re.search(r'\n\n(?=[А-ЯЁ])', text) or re.search(
+            r'^\s*(?:Final\s+Answer|Ответ)\s*:\s*',
+            text, re.IGNORECASE | re.MULTILINE,
+        )
+        if m:
+            text = text[m.end():]
 
     lines = text.rstrip().split("\n")
 

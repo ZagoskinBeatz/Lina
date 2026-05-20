@@ -491,16 +491,6 @@ class ChatController:
             if fmt.is_help_command(text):
                 return fmt.format_help()
 
-            # GUI pure-model mode: bypass IntentBridge/governance completely
-            try:
-                from lina.gui.settings import get_settings
-                if get_settings().pipeline.pure_model_mode:
-                    if self._request_handler:
-                        return self._request_handler(text)
-                    return "⚠ LLM-обработчик не подключён."
-            except Exception as e:
-                logger.debug("Pure model mode check failed: %s", e)
-
             # ── 1. IntentBridge → governance ───────────────────────
             from lina.intent.bridge import get_intent_bridge
             from lina.intent.types import IntentStatus

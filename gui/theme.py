@@ -88,7 +88,7 @@ class ThemeColors:
     inline_code_bg: str = "rgba(30, 34, 80, 0.50)"
     inline_code_fg: str = "#b8c8ff"
 
-    # Mode tabs (PIPE / PURE → Быстрый / Профессиональный / Креативный)
+    # Mode tabs (наследие; больше не используются после удаления PURE/PIPE)
     tab_active: str = "#6c8cff"
     tab_inactive: str = "rgba(255, 255, 255, 0.08)"
 

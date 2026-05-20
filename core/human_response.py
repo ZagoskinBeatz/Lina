@@ -40,6 +40,23 @@ _LEAKAGE_PATTERNS = [
     re.compile(r'\[(?:mini|full|🟢|🔵)\s*(?:mini|full)?\]', re.IGNORECASE),
     # internal cache marker
     re.compile(r'^\[кэш\]\s*', re.IGNORECASE),
+    # Chain-of-Thought / meta-analysis leaks (Qwen и похожие модели любят
+    # «думать вслух» в начале ответа на английском)
+    re.compile(r'\bThinking\s+Process\s*:', re.IGNORECASE),
+    re.compile(r'\b(?:Analyze|Analyzing)\s+the\s+(?:Request|Provided\s+Context|Question|Input)\b',
+               re.IGNORECASE),
+    re.compile(r'^\s*(?:My\s+Role|Constraints|My\s+Task|Step\s*\d+\s*:)\s*:',
+               re.IGNORECASE | re.MULTILINE),
+    re.compile(r'^\s*\d+\.\s+(?:Analyze|Identify|Understand|Plan)\b',
+               re.IGNORECASE | re.MULTILINE),
+    # XML-подобные thinking-теги
+    re.compile(r'<think(?:ing)?\b[^>]*>', re.IGNORECASE),
+    # Утечка системного промпта / инструкций (модель повторяет свои правила)
+    re.compile(r'АЛГОРИТМ\s*\(выполни\s+строго', re.IGNORECASE),
+    re.compile(r'БЕЗОПАСНОСТЬ\s*[—\-]\s*НИКОГДА', re.IGNORECASE),
+    re.compile(r'ПРОТОКОЛ\s+ВЫПОЛНЕНИЯ', re.IGNORECASE),
+    re.compile(r'ВЕРИФИКАЦИЯ\s*\(обязательн', re.IGNORECASE),
+    re.compile(r'Шаг\s+[ABC]\.\s+(?:Проверь|Подбери|Сформируй)', re.IGNORECASE),
 ]
 
 # Технические префиксы для удаления
@@ -63,6 +80,63 @@ _MIN_USEFUL_LENGTH = 1
 
 # Порог: ответ целиком похож на JSON-объект
 _FULL_JSON_RE = re.compile(r'^\s*\{.*\}\s*$', re.DOTALL)
+
+
+# ─── Утечки CoT — попытка вырезать вместо отбрасывания ─────────────────────────
+
+# XML-подобные thinking-блоки (Qwen3, DeepSeek-R1 и пр.)
+_THINK_BLOCK_RE = re.compile(
+    r'<think(?:ing)?\b[^>]*>.*?</think(?:ing)?>',
+    re.IGNORECASE | re.DOTALL,
+)
+
+# Несколько типичных «открывалок» CoT, после которых модель льёт
+# свои размышления английским текстом. Срезаем всё до конца блока,
+# а блок заканчивается обычно перед нормальным ответом.
+_COT_OPENERS_RE = re.compile(
+    r'(?:'
+    r'\bThinking\s+Process\s*:'
+    r'|^\s*(?:My\s+Role|Constraints|My\s+Task)\s*:'
+    r'|^\s*\d+\.\s+Analyze\s+the\s+(?:Request|Provided\s+Context|Input|Question)\b'
+    r')',
+    re.IGNORECASE | re.MULTILINE,
+)
+
+# Маркеры, которые часто отделяют CoT от финального ответа.
+_COT_END_MARKERS = [
+    re.compile(r'^\s*(?:Final\s+(?:Answer|Response)|Ответ)\s*:\s*', re.IGNORECASE | re.MULTILINE),
+    re.compile(r'^\s*---\s*$', re.MULTILINE),
+    re.compile(r'\n\n(?=[А-ЯЁ])'),  # пустая строка → русское предложение
+]
+
+
+def _strip_cot(text: str) -> str:
+    """Try to remove chain-of-thought blocks, keeping the actual answer.
+
+    1. Удаляем `<think>...</think>` (нативные теги).
+    2. Если найден маркер CoT-вступления, ищем границу и режем по ней.
+    Возвращает очищенный текст. Если ничего не получилось — текст без изменений.
+    """
+    if not text:
+        return text
+
+    # 1. Native thinking tags
+    cleaned = _THINK_BLOCK_RE.sub("", text).strip()
+    # ещё могут быть незакрытые <think> — отбрасываем всё до </think>
+    cleaned = re.sub(
+        r'<think(?:ing)?\b[^>]*>.*?(?:</think(?:ing)?>|$)',
+        '', cleaned, flags=re.IGNORECASE | re.DOTALL,
+    ).strip()
+
+    # 2. CoT openers — режем до маркера-конца
+    if _COT_OPENERS_RE.search(cleaned):
+        for end_re in _COT_END_MARKERS:
+            m = end_re.search(cleaned)
+            if m:
+                tail = cleaned[m.end():].strip()
+                if len(tail) >= 20:
+                    return tail
+    return cleaned
 
 
 # ─── Результат проверки ────────────────────────────────────────────────────────
@@ -178,6 +252,16 @@ class HumanResponseLayer:
                 text = new_text
 
         text = text.strip()
+
+        # ── 2b. Срезать CoT-блоки (Qwen «Thinking Process», <think>, пр.) ──
+        stripped_cot = _strip_cot(text)
+        if stripped_cot != text and stripped_cot.strip():
+            issues.append("cot_stripped")
+            logger.debug(
+                "CoT block stripped: %d → %d chars",
+                len(text), len(stripped_cot),
+            )
+            text = stripped_cot.strip()
 
         # ── 3. Проверить на JSON leakage ──
         if self._is_leakage(text):
